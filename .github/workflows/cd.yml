@@ -64,7 +64,7 @@ jobs:
         run: echo "tag=${VERSION#v}" >> "$GITHUB_OUTPUT"
 
       - name: Сборка и push (sha + версия + latest)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
