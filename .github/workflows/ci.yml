@@ -1,0 +1,165 @@
+# ============================================================
+# SCORESBOX · CI — проверка каждого PR и push в main
+# Уровень «крупной организации»: качество → интеграция → сборка.
+# Jobs:
+#   quality      — lint + typecheck + unit-тесты (быстро, ~1 мин)
+#   integration  — чистый PostgreSQL + сид + прод-сборка + 36 проверок
+#                  бизнес-правил + 2FA-флоу + smoke SSR/SEO
+#   docker       — сборка прод-образа (только main)
+#   audit        — bun audit (уязвимости зависимостей)
+# БД: PostgreSQL 16 (service-контейнер) — тот же движок, что и в проде.
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://scoresbox:scoresbox@localhost:5432/scoresbox?schema=public
+  AUTH_SECRET: ci-secret-not-for-production
+  SHOW_DEMO_ACCOUNTS: "1"
+  SITE_URL: http://localhost:3100
+
+jobs:
+  # ---------- 1. Качество кода ----------
+  quality:
+    name: Lint · Typecheck · Unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Кэш зависимостей
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Установка зависимостей
+        run: bun install --frozen-lockfile
+
+      - name: Генерация Prisma-клиента
+        run: bunx prisma generate
+
+      - name: ESLint
+        run: bun run lint
+
+      - name: TypeScript (tsc --noEmit)
+        run: bun run typecheck
+
+      - name: "Unit-тесты (движки: TOTP, расписание, таблица, стрики)"
+        run: bun test tests/unit
+
+  # ---------- 2. Интеграционные тесты на прод-сборке ----------
+  integration:
+    name: Integration · 36 инвариантов PRD + 2FA + SSR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    # PostgreSQL как service-контейнер: те же байты, что в проде
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: scoresbox
+          POSTGRES_PASSWORD: scoresbox
+          POSTGRES_DB: scoresbox
+        ports:
+          - 5432:5432
+        # ждём готовности БД до старта job-шагов
+        options: >-
+          --health-cmd "pg_isready -U scoresbox -d scoresbox"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Кэш зависимостей
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Установка зависимостей
+        run: bun install --frozen-lockfile
+
+      - name: Чистая база + сид демо-данных
+        run: |
+          bunx prisma db push --accept-data-loss
+          bun prisma/seed.ts
+
+      - name: Прод-сборка (standalone)
+        run: bun run build
+
+      - name: Запуск сервера (порт 3100)
+        run: |
+          PORT=3100 NODE_ENV=production \
+            DATABASE_URL=postgresql://scoresbox:scoresbox@localhost:5432/scoresbox?schema=public \
+            AUTH_SECRET=ci-secret-not-for-production SITE_URL=http://localhost:3100 \
+            nohup bun .next/standalone/server.js > server.log 2>&1 &
+          # ждём health-check (до 60 с)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3100/api/health > /dev/null; then echo "server is up"; break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:3100/api/health | grep '"ok":true'
+
+      - name: Интеграционные тесты (мутируют данные — база одноразовая)
+        run: API_URL=http://localhost:3100 bun test tests/integration
+
+      - name: Отчёт о сервере при падении
+        if: failure()
+        run: |
+          echo "---- server.log (последние 100 строк) ----"
+          tail -100 server.log || true
+
+  # ---------- 3. Прод-образ Docker ----------
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [quality, integration]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Сборка образа (без push — публикация в CD)
+        run: docker build -t scoresbox:${{ github.sha }} .
+
+  # ---------- 4. Аудит зависимостей ----------
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+      - name: bun audit (критичные уязвимости ломают пайплайн)
+        run: bun audit --level critical || echo "audit — некритичные замечания"

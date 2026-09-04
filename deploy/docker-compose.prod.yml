@@ -1,0 +1,50 @@
+# ============================================================
+# SCORESBOX · прод-стек на сервере (/opt/scoresbox)
+# Отличие от docker-compose.yml (dev): app тянется из GHCR по тегу,
+# а не собирается локально. Тег задаёт scripts/deploy.sh.
+#   TAG=1.2.3 docker compose -f deploy/docker-compose.prod.yml up -d
+# Переменные: .env на сервере (AUTH_SECRET, POSTGRES_PASSWORD, …)
+# Реверс-прокси — nginx на хосте (TLS через certbot), см. deploy/nginx.conf
+# ============================================================
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: scoresbox-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scoresbox
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD обязателен — задайте в .env}
+      POSTGRES_DB: scoresbox
+    volumes:
+      - scoresbox-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scoresbox -d scoresbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    # наружу не смотрит — только внутри docker-сети
+
+  app:
+    image: ${DEPLOY_IMAGE:-ghcr.io/artyom-front/studious-tribble}:${TAG:-latest}
+    container_name: scoresbox-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql://scoresbox:${POSTGRES_PASSWORD}@db:5432/scoresbox?schema=public
+      - PORT=3000
+    # наружу смотрит только nginx на хосте (127.0.0.1:3000)
+    ports:
+      - "127.0.0.1:3000:3000"
+    healthcheck:
+      test: ["CMD", "bun", "-e", "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+volumes:
+  scoresbox-pgdata:
