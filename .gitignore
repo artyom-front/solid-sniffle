@@ -1,0 +1,92 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts
+local-*
+.claude
+.z-ai-config
+*.log
+dev.log
+dev.out.log
+test
+prompt
+
+server.log
+# Skills directory
+/skills/
+# agent service files
+/tool-results/
+/upload/
+/scripts/shots/
+
+# sandbox-инфраструктура z.ai (не часть проекта)
+# Исключение: бут-скрипт .zscripts/dev.sh и хранитель БД коммитятся —
+# платформа запускает их при старте песочницы (см. файлы с комментариями).
+/.zscripts/*
+!/.zscripts/dev.sh
+!/.zscripts/build.sh
+!/.zscripts/start-preview.sh
+!/.zscripts/seed-if-empty.mjs
+!/.zscripts/pg
+/.zscripts/pg/*
+!/.zscripts/pg/keeper.mjs
+!/.zscripts/pg/package.json
+/mini-services/
+
+# локальная база (PostgreSQL — внешняя, файла в репо нет)
+/db/
+!.env.example
+
+# артефакты переноса — не часть репозитория
+/download/
+# доставочные архивы в public/ — отдаются превью-сервером, в git не входят
+/public/*.zip
+/public/*.git-bundle
+
+# внутренний журнал среды — не часть проекта
+/worklog.md
+
+# PDF-аналитика в public/ — раздаётся превью-сервером, в git не входит
+/public/*.pdf
+
+# промежуточные артефакты PDF-пайплайна (генерируются make-analytics-pdf.py)
+/scripts/analytics-body.pdf
+/scripts/pdf-cover.pdf
