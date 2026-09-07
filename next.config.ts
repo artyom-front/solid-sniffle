@@ -1,8 +1,5 @@
 import type { NextConfig } from "next";
 
-// Умеренная CSP: Next.js требует inline-скрипты для гидратации (без nonce).
-// Внешние скрипты запрещены полностью — XSS-инъекции не исполняются.
-// Усиление через nonce — см. DEPLOY.md §7.
 const CSP = [
   "default-src 'self'",
   "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
@@ -17,11 +14,27 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
-  // standalone-сборка для деплоя: .next/standalone/server.js + минимальные зависимости
   output: "standalone",
   poweredByHeader: false,
   compress: true,
   productionBrowserSourceMaps: false,
+  
+  // 🆕 Prisma использует динамические импорты, не должен бандлиться Next.js
+  serverExternalPackages: ["prisma", "@prisma/client"],
+  
+  // 🆕 Принудительно включаем Prisma CLI и его зависимости в трейсинг
+  outputFileTracingIncludes: {
+    "/**/*": [
+      "./node_modules/prisma/**/*",
+      "./node_modules/@prisma/**/*",
+      "./node_modules/.bin/prisma",
+      "./node_modules/effect/**/*",
+      "./node_modules/fast-check/**/*",
+      "./node_modules/pure-rand/**/*",
+      "./node_modules/dotenv/**/*",
+    ],
+  },
+  
   typescript: {
     ignoreBuildErrors: true,
   },
@@ -29,7 +42,6 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // базовые security-заголовки на все маршруты
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
@@ -39,12 +51,10 @@ const nextConfig: NextConfig = {
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
           { key: "Content-Security-Policy", value: CSP },
-          // действует только на HTTPS-проде; force включается браузером после первого захода
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains" },
         ],
       },
       {
-        // API не кэшируется прокси (данные live)
         source: "/api/:path*",
         headers: [
           { key: "Cache-Control", value: "no-store, max-age=0" },
@@ -52,12 +62,10 @@ const nextConfig: NextConfig = {
         ],
       },
       {
-        // админка — служебная зона, из поиска исключена
         source: "/admin/:path*",
         headers: [{ key: "X-Robots-Tag", value: "noindex, nofollow" }],
       },
       {
-        // sitemap/robots отдаём без кэша прокси на сутки
         source: "/sitemap.xml",
         headers: [{ key: "Cache-Control", value: "public, max-age=3600" }],
       },
