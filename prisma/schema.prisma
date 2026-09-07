@@ -1,0 +1,308 @@
+// PRD: Спортивно-аналитический портал "Футбол Чувашии"
+// Модель данных v1.0 — PostgreSQL (золотой стандарт: и дев, и CI, и прод на одном движке БД)
+// Инвариант №1: жёсткое разделение Person (человек) / Team (команда-состав) / Club (бренд/юрлицо)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// Milestone 1: Core & Identity
+// ============================================================
+
+/// Физическое лицо. Может быть игроком, тренером И судьёй одновременно (в разных лигах)
+model Person {
+  id         String    @id @default(cuid())
+  firstName  String
+  lastName   String
+  middleName String?
+  birthDate  DateTime?
+  /// GK | DF | MF | FW
+  position   String?
+  isReferee  Boolean   @default(false)
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  users             User[]
+  registrations     Registration[]
+  events            MatchEvent[]       @relation("EventPerson")
+  assists           MatchEvent[]       @relation("EventAssist")
+  lineups           LineupEntry[]
+  suspensions       Suspension[]
+  refereedMatches   Match[]            @relation("MatchReferee")
+  ratingsReceived  RefereeRating[]    @relation("RatingReferee")
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  /// SUPER_ADMIN | LEAGUE_ADMIN | CLUB_ADMIN | REFEREE | PLAYER
+  role         String
+  personId     String?
+  person       Person?  @relation(fields: [personId], references: [id])
+  clubId       String?
+  club         Club?    @relation(fields: [clubId], references: [id])
+  ratingsGiven RefereeRating[] @relation("RatingAuthor")
+
+  /// 2FA (RFC 6238 TOTP): секрет в base32, включён/выключен
+  totpSecret   String?
+  totpEnabled  Boolean  @default(false)
+  /// последний принятый TOTP-шаг (30 c) — защита от повтора кода
+  totpLastStep Int      @default(0)
+  /// резервные коды (sha256-хэши, JSON-массив) для входа без телефона
+  recoveryCodes String?
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+model Club {
+  id          String  @id @default(cuid())
+  name        String
+  city        String?
+  logoUrl     String?
+  description String?
+  teams       Team[]
+  admins      User[]
+}
+
+model Team {
+  id      String  @id @default(cuid())
+  name    String
+  clubId  String?
+  club    Club?   @relation(fields: [clubId], references: [id])
+  logoUrl String?
+  city    String?
+  registrations Registration[]
+  homeMatches Match[]      @relation("HomeTeam")
+  awayMatches Match[]      @relation("AwayTeam")
+  events      MatchEvent[]
+  lineups     LineupEntry[]
+}
+
+model Stadium {
+  id       String  @id @default(cuid())
+  name     String
+  city     String?
+  address  String?
+  capacity Int?
+  matches  Match[]
+}
+
+// ============================================================
+// Milestone 2: Tournament Engine
+// ============================================================
+
+model League {
+  id        String  @id @default(cuid())
+  name      String
+  /// Короткое имя для сайдбара/виджетов
+  shortName String?
+  /// F11 | F8 | F6 | FUTSAL
+  format    String
+  /// Закреплена в «Топ-лигах» левого сайдбара (админ)
+  isPinned  Boolean @default(false)
+  /// Порядок в «Топ-лигах» (меньше — выше)
+  priority  Int     @default(0)
+  /// Epic 1: дисциплинарные правила
+  yellowCardLimit      Int @default(3)
+  yellowCardBanMatches Int @default(1)
+  redCardBanMatches    Int @default(1)
+  /// Epic 2: регламентный счёт техпоражения (3 — футбол, 5 — мини-футбол)
+  walkoverScore        Int @default(3)
+  /// Epic 3: трансферное окно
+  transferWindowEnd    DateTime?
+  seasons    Season[]
+  createdAt  DateTime @default(now())
+}
+
+model Season {
+  id        String   @id @default(cuid())
+  leagueId  String
+  league    League   @relation(fields: [leagueId], references: [id])
+  name      String
+  startDate DateTime
+  endDate   DateTime?
+  isCurrent Boolean  @default(false)
+  stages        Stage[]
+  registrations Registration[]
+  suspensions   Suspension[]
+}
+
+model Stage {
+  id       String @id @default(cuid())
+  seasonId String
+  season   Season @relation(fields: [seasonId], references: [id])
+  name     String
+  /// ROUND_ROBIN | KNOCKOUT | GROUP
+  type     String
+  /// JSON-конфиг порядка тай-брейков (PRD M2)
+  tieBreakers String @default("points,head_to_head,goal_diff,goals_for,wins,fair_play,name")
+  matches  Match[]
+}
+
+model Match {
+  id         String   @id @default(cuid())
+  stageId    String
+  stage      Stage    @relation(fields: [stageId], references: [id])
+  round      Int?
+  homeTeamId String
+  homeTeam   Team     @relation("HomeTeam", fields: [homeTeamId], references: [id])
+  awayTeamId String
+  awayTeam   Team     @relation("AwayTeam", fields: [awayTeamId], references: [id])
+  stadiumId  String?
+  stadium    Stadium? @relation(fields: [stadiumId], references: [id])
+  kickoff    DateTime
+  /// SCHEDULED | LIVE | COMPLETED | WALKOVER | POSTPONED
+  status     String   @default("SCHEDULED")
+  /// Epic 2: HOME (неявка хозяев) | AWAY (неявка гостей) | BOTH (срыв)
+  walkoverType String?
+  /// Фактический счёт. Для WO остаётся NULL — подставляется регламентный (COALESCE-принцип PRD)
+  homeScore  Int?
+  awayScore  Int?
+  /// Судья-арбитр. Инвариант: матч не завершается без главного судьи
+  refereeId  String?
+  referee    Person?  @relation("MatchReferee", fields: [refereeId], references: [id])
+  note       String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  events  MatchEvent[]
+  lineups LineupEntry[]
+  ratings RefereeRating[]
+}
+
+// ============================================================
+// Milestone 3: Match Protocol & Analytics
+// ============================================================
+
+/// Событие протокола. Инвариант: person должен быть заявлен за team на дату матча и не дисквалифицирован
+model MatchEvent {
+  id             String  @id @default(cuid())
+  matchId        String
+  match          Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  minute         Int
+  /// GOAL | PENALTY | OWN_GOAL | YELLOW_CARD | RED_CARD | SUB_OUT | SUB_IN
+  type           String
+  personId       String
+  person         Person  @relation("EventPerson", fields: [personId], references: [id])
+  teamId         String
+  team           Team    @relation(fields: [teamId], references: [id])
+  assistPersonId String?
+  assistPerson   Person? @relation("EventAssist", fields: [assistPersonId], references: [id])
+  createdAt      DateTime @default(now())
+}
+
+/// Epic 3: заявка игрока на сезон (Человек + Команда + Сезон + даты)
+model Registration {
+  id        String    @id @default(cuid())
+  personId  String
+  person    Person    @relation(fields: [personId], references: [id])
+  teamId    String
+  team      Team      @relation(fields: [teamId], references: [id])
+  seasonId  String
+  season    Season    @relation(fields: [seasonId], references: [id])
+  startDate DateTime
+  endDate   DateTime?
+  number    Int?
+  /// PLAYER | COACH — человек может быть игроком в одной лиге и тренером в другой
+  role      String    @default("PLAYER")
+  /// ACTIVE | ENDED
+  status    String    @default("ACTIVE")
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@unique([personId, teamId, seasonId])
+}
+
+/// Заявленный состав на конкретный матч
+model LineupEntry {
+  id       String @id @default(cuid())
+  matchId  String
+  match    Match  @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  teamId   String
+  team     Team   @relation(fields: [teamId], references: [id])
+  personId String
+  person   Person @relation(fields: [personId], references: [id])
+  isStarter Boolean @default(true)
+  number   Int?
+  createdAt DateTime @default(now())
+
+  @@unique([matchId, personId])
+}
+
+/// Epic 1: дисквалификация. Скоуп — сезон (турнир)
+model Suspension {
+  id        String   @id @default(cuid())
+  personId  String
+  person    Person   @relation(fields: [personId], references: [id])
+  seasonId  String
+  season    Season   @relation(fields: [seasonId], references: [id])
+  /// AUTO_RED | AUTO_YELLOW | MANUAL (КДК)
+  source    String
+  /// Причина: "Агрессия", "Оскорбление судьи", "Договорной матч"...
+  reason    String?
+  matchesTotal Int   @default(1)
+  matchesServed Int  @default(0)
+  isLifetime    Boolean @default(false)
+  isActive      Boolean @default(true)
+  /// Матч-источник (та самая красная, из-за которой бан)
+  triggeredByMatchId String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Оценка судьи капитанами/админами после матча (Milestone 5)
+model RefereeRating {
+  id           String  @id @default(cuid())
+  matchId      String
+  match        Match   @relation(fields: [matchId], references: [id], onDelete: Cascade)
+  refereeId    String
+  referee      Person  @relation("RatingReferee", fields: [refereeId], references: [id])
+  authorUserId String
+  author       User    @relation("RatingAuthor", fields: [authorUserId], references: [id])
+  /// 1..5
+  rating       Int
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  @@unique([matchId, authorUserId])
+}
+
+/// Рекламные слоты (Milestone 4): управляются вручную через админку
+model Banner {
+  id        String   @id @default(cuid())
+  /// TOP (728x90 под шапкой) | RIGHT_TOP | RIGHT_BOTTOM (300x250)
+  placement String
+  title     String
+  imageUrl  String?
+  linkUrl   String?
+  /// Текст слогана, если нет картинки
+  text      String?
+  isActive  Boolean  @default(true)
+  priority  Int      @default(0)
+  startsAt  DateTime?
+  endsAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+/// Инвариант №4: журнал аудита всех пост-фактум изменений
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  userEmail String?
+  entity    String
+  entityId  String
+  /// CREATE | UPDATE | DELETE | MERGE | COMPLETE | WO_ASSIGN | RESET
+  action    String
+  oldValue  String?
+  newValue  String?
+  createdAt DateTime @default(now())
+}
