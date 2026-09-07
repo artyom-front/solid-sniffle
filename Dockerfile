@@ -1,7 +1,4 @@
 # SCORESBOX — Dockerfile (multi-stage, standalone-сборка Next.js)
-# Сборка:  docker build -t scoresbox .
-# Запуск:  docker run -p 3000:3000 --env-file .env scoresbox
-# База данных — PostgreSQL (внешний сервис/контейнер db), коннект через DATABASE_URL.
 
 FROM oven/bun:1 AS deps
 WORKDIR /app
@@ -13,7 +10,6 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
-# DATABASE_URL на этапе сборки не нужен — Prisma генерирует клиента без коннекта
 RUN bunx prisma generate && bun run build
 
 FROM oven/bun:1 AS runner
@@ -24,19 +20,25 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     HOME=/tmp
 
-# Непривилегированный пользователь — ЧИСЛОВЫМ uid/gid, без adduser/addgroup:
-# в базовом образе oven/bun:1 этих команд нет (exit 127 — именно это роняло
-# «Docker build» и «Build & push» в GitHub Actions 04.09.2026, сборка падала за 2 c).
-# USER 1001:1001 работает на ЛЮБОМ базовом образе (пользователь в /etc/passwd не нужен).
-
+# Standalone-сборка Next.js
 COPY --from=builder --chown=1001:1001 /app/.next/standalone ./
+
+# 🆕 ВАЖНО: static-файлы не включаются в standalone, их нужно копировать отдельно
+COPY --from=builder --chown=1001:1001 /app/.next/static ./.next/static
+
 COPY --from=builder --chown=1001:1001 /app/public ./public
-# Prisma-клиент и схема — для миграций при деплое (scripts/deploy.sh)
 COPY --from=builder --chown=1001:1001 /app/prisma ./prisma
+
+# Prisma-клиент и схема
 COPY --from=builder --chown=1001:1001 /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=1001:1001 /app/node_modules/@prisma ./node_modules/@prisma
-# Prisma CLI — для прогона миграций из deploy.sh
 COPY --from=builder --chown=1001:1001 /app/node_modules/prisma ./node_modules/prisma
+
+# 🆕 Зависимости Prisma CLI для миграций (effect используется в @prisma/config)
+COPY --from=builder --chown=1001:1001 /app/node_modules/effect ./node_modules/effect
+COPY --from=builder --chown=1001:1001 /app/node_modules/fast-check ./node_modules/fast-check
+COPY --from=builder --chown=1001:1001 /app/node_modules/pure-rand ./node_modules/pure-rand
+COPY --from=builder --chown=1001:1001 /app/node_modules/dotenv ./node_modules/dotenv
 
 USER 1001:1001
 EXPOSE 3000
