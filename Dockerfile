@@ -20,25 +20,13 @@ ENV NODE_ENV=production \
     HOSTNAME=0.0.0.0 \
     HOME=/tmp
 
-# Standalone-сборка Next.js
 COPY --from=builder --chown=1001:1001 /app/.next/standalone ./
-
-# 🆕 ВАЖНО: static-файлы не включаются в standalone, их нужно копировать отдельно
 COPY --from=builder --chown=1001:1001 /app/.next/static ./.next/static
-
 COPY --from=builder --chown=1001:1001 /app/public ./public
 COPY --from=builder --chown=1001:1001 /app/prisma ./prisma
 
-# Prisma-клиент и схема
-COPY --from=builder --chown=1001:1001 /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=builder --chown=1001:1001 /app/node_modules/@prisma ./node_modules/@prisma
-COPY --from=builder --chown=1001:1001 /app/node_modules/prisma ./node_modules/prisma
-
-# 🆕 Зависимости Prisma CLI для миграций (effect используется в @prisma/config)
-COPY --from=builder --chown=1001:1001 /app/node_modules/effect ./node_modules/effect
-COPY --from=builder --chown=1001:1001 /app/node_modules/fast-check ./node_modules/fast-check
-COPY --from=builder --chown=1001:1001 /app/node_modules/pure-rand ./node_modules/pure-rand
-COPY --from=builder --chown=1001:1001 /app/node_modules/dotenv ./node_modules/dotenv
+# ВСЕ зависимости целиком — чтобы prisma db push нашёл effect и всё остальное
+COPY --from=builder --chown=1001:1001 /app/node_modules ./node_modules
 
 USER 1001:1001
 EXPOSE 3000
