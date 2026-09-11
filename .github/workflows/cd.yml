@@ -103,7 +103,7 @@ jobs:
         # вручную с Windows (например, старый deploy.sh времён scores21,
         # который тянет alpine и падает на 429 Docker Hub). Каждый деплой
         # приносит на сервер АКТУАЛЬНЫЕ scripts/ и compose из этого же коммита.
-        uses: appleboy/scp-action@v0.1.7
+        uses: appleboy/scp-action@v1.0.0
         with:
           host: ${{ secrets.DEPLOY_HOST }}
           username: ${{ secrets.DEPLOY_USER }}
