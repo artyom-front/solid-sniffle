@@ -1,0 +1,36 @@
+# Зависимости: еженедельные обновления патч/минорных версий.
+# МАЖОРНЫЕ апгрейды (lucide 0.5→1, TS 5→7, eslint 9→10 и т.п.)
+# ПОЛНОСТЬЮ ЗАПРЕЩЕНЫ: они ломают сборку и красят CI.
+# Мажор обновляем только вручную, своей веткой и своим прогоном.
+version: 2
+
+updates:
+  - package-ecosystem: bun
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Moscow
+    open-pull-requests-limit: 10
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    groups:
+      patch-and-minor:
+        update-types: ["patch", "minor"]
+    labels:
+      - dependencies
+    commit-message:
+      prefix: "chore(deps)"
+
+  # GitHub Actions самих пайплайнов
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - ci
+      - dependencies
+    commit-message:
+      prefix: "chore(ci)"
