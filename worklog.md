@@ -1,0 +1,707 @@
+# WORKLOG — SCORESBOX (единый журнал агентов)
+
+> Пересоздан 08.09.2026: песочница сброшена платформой за ночь (07→08.09),
+> прежний worklog был в .gitignore и не пережил сброс. С этого дня файл
+> в git (правка .gitignore) и переживает сбросы. Краткая история утраченных
+> Tasks 11–14 сохранена по контексту разговора.
+
+## Краткая история (Tasks 1–14, восстановлено)
+
+- Tasks 1–10 (до 07.09, утеряны): перенос проекта в solid-sniffle, Docker-фикс
+  exit 127 (USER 1001:1001), бандлы поставки, public/download в git.
+- Task 11 (07.09): 404 на /download/** — сброс песочницы стёр gitignored-файлы;
+  фикс — поставка в public/download/ (в git).
+- Task 12 (07.09): GHCR «denied: installation not allowed to Create
+  organization package» — фикс permissions: packages:write в cd.yml;
+  бандл 2026-09-07-ghcr.
+- Task 13 (07.09): exit 126 «Permission denied» на ./scripts/deploy.sh —
+  фикс: вызовы через bash; бандл 2026-09-07-execfix.
+- Task 14 (07.09): «env file deploy/.env not found» + на VPS старые файлы
+  эпохи scores21 — фикс: env_file ../.env + автосинк scripts/compose на
+  сервер (scp-action в deploy-джобе); бандл 2026-09-07-composefix.
+- (между 14 и 15, в обрезанном контексте): deploy упал на «Cannot find
+  package 'effect'» при prisma db push — юзер сам применил фикс на GitHub
+  (Dockerfile: COPY node_modules целиком + .next/static) и релизом v1.0.12.
+  **Результат: деплой полностью зелёный, сайт работает.**
+
+---
+Task ID: 15
+Agent: Super Z (main)
+Task: Сайт в проде (v1.0.12). Просьбы юзера: что дальше; смена домена
+scoresbox.ru; чистка .md без дублей; лучшие практики мониторинга/логов.
+
+Work Log:
+- Синхронизировал Dockerfile с рабочей версией v1.0.12 юзера (node_modules
+  целиком — фикс effect; .next/static; USER 1001:1001).
+- Чистка доков (scripts/doc-cleanup.py): DEPLOY.md переписан — новый
+  заголовок + РАЗДЕЛ I «Быстрые задачи» (I.1 релиз, I.2 смена домена,
+  I.3 мониторинг, I.4 логи, I.5 откат, I.6 бэкапы, I.7 бандл из чата)
+  вместо устаревшего ПУТЯ А; ПУТЬ Б → РАЗДЕЛ II «С нуля», footballday.ru →
+  scoresbox.ru. README.md (корень) создан. Удалены: TUTORIAL, ANALYTICS,
+  RECOVERY, SETTINGS, GUIDE-START-HERE + все public/*.md (прод их раздавал).
+- Мониторинг: ротация логов в compose (json-file 10m×3, оба сервиса);
+  scripts/status.sh (экспресс-диагностика) + добавлен в scp-автосинк cd.yml.
+- Безопасность: .dockerignore + public/download — прод-образ больше НЕ
+  раздаёт исходники по /download/... (текущий v1.0.12 раздаёт — исправится
+  релизом v1.0.13).
+- .env.example: footballday.ru → scoresbox.ru. .gitignore: worklog.md в git.
+- Ошибки процесса (обе пойманы и исправлены): (1) make-archives.aborted на
+  cp download/README.md после сброса (chicken-egg) — README теперь
+  генерируется до копирования; (2) бандл был собран ДО коммита чистки —
+  пересобран из c5cfeb1, устаревшая копия перезаписана.
+- Верификация бандла: см. ниже. Коммиты: c5cfeb1 (cleanup) + delivery.
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-08-cleanup.git-bundle — применить + тег v1.0.13.
+- Домен scoresbox.ru: DNS A → IP; .env SITE_URL; setup-nginx.sh; certbot;
+  секрет DEPLOY_PUBLIC_URL (полная таблица — DEPLOY.md §I.2).
+- Мониторинг: 4 уровня (restart+healthcheck / health-check в CD / внешний
+  пинг UptimeRobot / status.sh) — DEPLOY.md §I.3.
+
+---
+Task ID: 16
+Agent: Super Z (main)
+Task: Пользователь обновил прод и заполняет данные; 8 новых задач:
+массовое добавление, персоны-роли-фото, протокол-файл, товарищеские
+матчи, обновление списков без F5/идемпотентность, UX цепочки
+чемпионат→сезон, доступы+TOTP-сброс, плюс вопросы (что такое «клуб»,
+когда появляется протокол) и просьба о превентивных рекомендациях.
+
+Work Log:
+- Исследование: схема, hooks (причина «нет обновления без F5» — version
+  не пробрасывался в useFetch CRUD-панелей), ProtocolEditor, публичные
+  сервисы. Параллельный Explore-агент дал полную карту админки.
+- Схема: Person +roles[]/gender/photoUrl; CustomRole; Media (bytea);
+  Match +isFriendly, stageId→nullable, +protocolUrl/protocolFileName;
+  User +isActive. prisma generate ok.
+- lib/roles.ts: 18 системных ролей (игрок/тренера/судейский корпус/
+  медицина/руководство) + кастомные «c:<id>»; isReferee синхронизируется.
+- API: /api/admin/import (CSV, dry-run через rollback-транзакцию,
+  идемпотентность по ФИО+ДР/названиям); /api/admin/media (sharp → WebP
+  1200px, до 6/10 МБ) + /api/media/[id] (immutable-кэш, отдельное
+  правило CSP-заголовков); persons (роли/антидубли 409+duplicates);
+  customroles; users (SUPER_ADMIN: создать/сброс пароля/блокировка/
+  сброс 2FA); matches (isFriendly, GET ?seasonId=friendly, action
+  protocol); login (isActive=403); stadiums/clubs/teams (фото+дубли).
+- Движки: lifecycle/discipline — товарищеские без дисциплины и проверок
+  заявки; getEligiblePlayers для friendly — активные заявки любого
+  сезона; номера в составе из заявки (не i+1).
+- UI: MediaUpload (drag&drop), ImportPanel (5 сущностей, шаблоны,
+  отчёт по строкам), UsersPanel; PeoplePanel переписан (роли-чипы,
+  кастомные роли, фото, антидубли с «создать всё равно»); Tournaments
+  (визард 4 шага, ссылки на заявки/расписание, авто-раскрытие);
+  MatchesCrud (вкладка «Товарищеские»); ProtocolEditor (вкладка «Файл
+  протокола» + подсказка «3 шага»); Registrations (роль в заявке);
+  AdminShell (version всем панелям, разделы «Импорт» и «Пользователи»).
+- Публичный сайт: icon.svg (BOX-квадрат по бренду); футер очищен;
+  MatchDayView — только Live/Завершённые (взаимоисключающие,
+  Завершённые=сегодня) и даты ‹/Сегодня/› ±10 дней; баннеры с
+  картинкой, TOP выровнен с центральной колонкой (фикс ширины),
+  пустые слоты не рендерятся; Crest/Avatar с logoUrl/photoUrl; фото на
+  страницах команды/игрока/стадиона; товарищеские в ленте дня и
+  бейдж/ссылка протокола на странице матча; guards null-stage во всех
+  сервисах.
+- Верификация: tsc чисто, eslint 0 ошибок, 54/54 unit, next build —
+  зелёный (/icon.svg в статике).
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-08-admin2.git-bundle → тег v1.0.14.
+- prisma db push пройдёт деплоем автоматически (изменения аддитивные).
+- Ответы пользователю: «клуб» = бренд/юрлицо (команд может быть
+  несколько); протокол появляется в списке для всех матчей сезона;
+  генератор календаря уже был в разделе «Расписание».
+- Рекомендации выданы в ответе (архив протоколов → OCR-парсинг,
+  массовые фото zip, печать бланка протокола, soft-delete и др.).
+
+---
+Task ID: 17
+Agent: Super Z (main)
+Task: Домен сменён (ок). Три задачи: (1) отдельный playbook-файл деплоя
+для другого проекта со всеми пройденными граблями; (2) скачиваемые
+CSV-шаблоны к массовому импорту с пояснением колонок/обязательности;
+(3) жёсткое разделение «судья ≠ игрок» (персона не может быть одновременно
+судьёй и игроком; в одном чемпионате+сезоне запрет, в разных лигах — можно)
+и раздельная статистика игрока/судьи/тренера — «проверить по всем моментам
+в коде».
+
+Work Log:
+- DEPLOY-PLAYBOOK.md (корень, ~600 строк): архитектура поставки, секреты,
+  Dockerfile/compose/deploy.sh/rollback.sh/cd.yml готовыми к копированию,
+  VPS/nginx/certbot, мониторинг 4 уровней, ТАБЛИЦА 14 ГРАБЛЕЙ
+  (симптом→причина→фикс: exit 126, env_file, устаревшие файлы на VPS,
+  effect, GHCR packages:write, public/download, exit 127 adduser, логи,
+  health, 0.0.0.0, concurrency, SITE_URL, accept-data-loss, docker login),
+  чек-лист и «сайт упал — порядок действий». Копия в public/download/
+  для скачивания без git. make-archives.sh: копирует в download/.
+- Инвариант «судья ≠ игрок», ДВА уровня:
+  • lib/roles.ts (чистый, без БД): REFEREE_CONFLICT_CODES (officials:
+    REFEREE/ASSISTANT_REFEREE/FOURTH_OFFICIAL/VAR/AVAR/INSPECTOR),
+    cardRoleConflict, assertNoCardRoleConflict (422, единый текст
+    CARD_ROLE_CONFLICT_HINT), roleName.
+  • lib/engine/conflicts.ts (БД): assertPlayerRegistrationAllowed
+    (заявка игрока ↔ судейство в этом же сезоне, 409) и
+    assertRefereeAssignmentAllowed (назначение судьи ↔ активная заявка
+    PLAYER сезона; + конфликт интересов: ЛЮБАЯ заявка в командах-участницах
+    — не судит свою команду даже как тренер; товарищеские без сезона
+    не проверяются).
+  • Точки подключения: persons POST/PATCH (карточка), registrations POST
+    (role=PLAYER), matches POST + PATCH + action referee (передаются
+    seasonId и [home,away]); import: конфликт в строке/мердже ролей +
+    сезонная проверка заявки; при импорте заявки роль PLAYER не пишется
+    на карточку судьи (кросс-лиговый сценарий: судит B, играет A).
+- Раздельная статистика: getPlayerProfile + блок coach (сезоны с ролью
+  COACH: матчи/В-Н-П/мяки/очки за период заявки, totals, % побед);
+  PlayerPage — секция «Тренерская карьера» отдельным блоком (рядом с
+  судейской и игровой; бейджи ролей уже были). Схема БД не менялась.
+- CSV-шаблоны: lib/importTemplates.ts — IMPORT_SPECS (5 сущностей:
+  колонки required/format/example + exampleRows + summary) и
+  buildTemplateCsv («;», CRLF); API GET /api/admin/import/template?type=
+  (BOM, Content-Disposition attachment); ImportPanel: кнопка «Скачать
+  шаблон CSV» (asChild+download), «Пример в поле», сводка под полем,
+  диалог «Как подготовить файл» — таблица колонок + IMPORT_RULES
+  (в т.ч. правило судья≠игрок, ФИО в трёх колонках, роли в одной ячейке).
+- UI-поддержка: PeoplePanel — красный блок-предупреждение + disabled
+  save при конфликте ролей, подсказка в блоке специализаций;
+  RegistrationsPanel — «· судья» у персон в списке и предупреждение при
+  заявке игрока-судьи.
+- Верификация: tsc 0, eslint 0, юнит 67/67 (13 новых: конфликт-группы,
+  шаблоны, «шаблоны не учат плохому»), next build зелёный (standalone OK).
+  Интеграционные тесты затронутые эндпоинты не трогают.
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-08-roles.git-bundle → тег v1.0.15 (миграций
+  нет: prisma db push ничего не меняет — правки логические).
+- DEPLOY-PLAYBOOK.md скачать напрямую: /download/DEPLOY-PLAYBOOK.md
+  или из репо другого проекта (файл самодостаточен).
+- Ответы пользователю: кросс-лиговый сценарий «играет A, судит B» =
+  карточка судьи + заявка PLAYER в сезоне A (роль заявки ≠ роль карточки);
+  статистика всегда по-role: игрок (события/составы), судья (назначенные
+  матчи), тренер (заявки COACH).
+
+---
+Task ID: 17-d
+Agent: Super Z (main)
+Task: Пользователь заметил: в прошлом сообщении была ссылка только на
+DEPLOY-PLAYBOOK.md, без ссылки на бандл. Доставить ссылку на бандл.
+
+Work Log:
+- git bundle verify: «records a complete history» — бандл самодостаточен.
+- Проверка содержимого через git fetch <бандл> main (как в README юзера):
+  HEAD = cb99c97 «SCORESBOX 2026-09-08 roles: …» (onefile-squash, cb99c97
+  живёт только внутри бандла — в основном репо его нет, это норма).
+- Файлы в бандле: DEPLOY-PLAYBOOK.md (600 строк), src/lib/roles.ts,
+  src/lib/engine/conflicts.ts (assertPlayerRegistrationAllowed/
+  assertRefereeAssignmentAllowed), src/lib/importTemplates.ts,
+  src/app/api/admin/import/template/route.ts,
+  src/components/portal/ImportPanel.tsx, prisma/schema.prisma — все на месте.
+- public/download внутрь бандла не вложен (рекурсии нет).
+- Ссылка выдана пользователю в ответе.
+
+Stage Summary:
+- Бандл актуален и проверен, отдельная ссылка доставлена:
+  /download/scoresbox-2026-09-08-roles.git-bundle → тег v1.0.15 после push.
+
+---
+Task ID: 18
+Agent: Super Z (main)
+Task: Массовый импорт игроков падает: в поле/отчёте «кракозябры»
+(U+FFFD вместо ФИО). Пользователь приложил файл — 7 колонок
+(Фамилия;Имя;Отчество;ДатаРождения;Позиция;Номер;Роль), ~40 строк.
+
+Work Log:
+- Диагноз: файл сохранён Excel'ем в windows-1251 («CSV (разделители —
+  точка с запятой)» — дефолт русской локали), а ImportPanel читал его
+  f.text() = всегда UTF-8 без детекции → кириллица → U+FFFD.
+  Структура файла у юзера была ПРАВИЛЬНАЯ (заголовки/алиасы/даты/роли
+  парсер понимает) — проблема только в кодировке.
+- Новый src/lib/csvEncoding.ts: decodeCsvBytes — BOM UTF-16LE/BE
+  (Excel «Текст в Юникоде»), строгая валидация UTF-8 (без TextDecoder
+  fatal — работает везде), windows-1251 и koi8-r по зашитым таблицам
+  (сгенерированы scripts/gen-encoding-tables.py из кодеков Python —
+  точность по стандарту; выбор cp1251/koi8 — частотный скоринг русского
+  текста). Таблицы зашиты, т.к. TextDecoder("windows-1251") не
+  гарантирован (Safari/JSC; bun тоже не поддерживает — проверено).
+- ImportPanel.onFile → readFileTextSmart + тост «кириллица
+  восстановлена (windows-1251…)» / предупреждение при unknown.
+- Серверный предохранитель в import/route.ts: csv.includes("\uFFFD")
+  → 422 с понятной подсказкой (Ctrl+C из Excel → Ctrl+V / CSV UTF-8).
+  Грабля процесса: литерал U+FFFD через редактор превращается в U+0000
+  (поймал проверкой кодпоинтов) — в коде только escape "\uFFFD".
+- IMPORT_RULES: новое правило про кодировки в диалоге «Как подготовить
+  файл». Образцовый CSV юзера (5 строк, UTF-8+BOM+«;»+CRLF):
+  public/download/players-example-utf8.csv (scripts/make-sample-import.py).
+- Тесты tests/unit/csvEncoding.test.ts — 11 штук: utf-8/BOM/cp1251
+  (реальные байты строки Артемьева)/koi8-r/UTF-16LE/BE/ASCII/мусор
+  «unknown»/обрезанный UTF-8. Грабли тестов: TextDecoder сам срезает
+  BOM; байт-массив koi8 перенесён с опечаткой (D2↔D4 — нашёл diff-ом
+  по эталону Python).
+- Верификация: eslint 0, tsc 0, unit 78/78 (+11), next build зелёный.
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-09-encoding.git-bundle → тег v1.0.16
+  (миграций нет — правки клиентские/логические).
+- Юзеру выданы обходные пути без деплоя: (1) Ctrl+C из Excel → Ctrl+V
+  в поле; (2) «Сохранить как → CSV UTF-8»; (3) PowerShell-перекодировка.
+  + проверка/чистка мусорных персон, если первый запуск что-то записал.
+
+---
+Task ID: 19
+Agent: Super Z (main)
+Task: Пользователь не смог удалить команду (0 матчей, 5 заявок) и профиль
+(0 событий, 1 заявка) — «не ясен алгоритм действий, админка непонятная».
+Запрос: проваливание в команду (редактирование состава, массовое
+добавление, фото) и в профиль игрока; превентивно применить мировые
+практики UI/UX, безопасности и эффективности.
+
+Work Log:
+- Диагноз: заявки (Registration) можно было СОЗДАТЬ, но инструмента
+  удалить/отредактировать не существовало вовсе (API /api/admin/
+  registrations/[id] отсутствовал) — удаление команды с заявками было
+  физически невозможно, «алгоритм» упирался в стену. Решение —
+  entity-менеджмент уровня GitHub/Stripe: drill-down карточки,
+  каскадное удаление с подтверждением, структурированные 409.
+- http.ts: HttpError.extra — машиночитаемая нагрузка ошибок
+  ({code, dependencies, cascadeAllowed}) рядом с error; errorResponse
+  пробрасывает её в JSON.
+- API команды: GET /api/admin/teams/[id] (карточка: поля+клуб, заявки
+  по сезонам с персонами/фото/№/ролями/датами, последние 30 матчей,
+  deleteBlockers+canDelete); DELETE с телом {cascade:true} — команда
+  без матчей удаляется атомарно вместе с заявками (транзакция+аудит
+  CASCADE); при матчах — 409 TEAM_HAS_MATCHES со счётчиками;
+  PATCH — новый guard: CLUB_ADMIN только свой клуб.
+- API персоны: GET /api/admin/persons/[id] (профиль, все заявки с
+  командами/сезонами/лигами, статистика groupBy событий: голы/ЖК/КК,
+  счётчики истории, deleteBlockers); DELETE {cascade:true} — без
+  истории (события/составы/судейство/дискв.) удаляется с заявками и
+  отвязкой учёток; с историей — 409 PERSON_HAS_HISTORY с подсказкой
+  про Merge (не голый текст, а структура).
+- API заявок: GET /api/admin/registrations?seasonId= (список с
+  персонами и командами); НОВЫЙ [id]: PATCH (номер/роль/endDate/
+  status — отзаявка и возврат) и DELETE (запрещён при выходах в
+  составах сезона — 409 REGISTRATION_HAS_LINEUPS, подсказка
+  «отзаявить»); POST усилена: проверка существования команды и
+  персоны (понятная 404 вместо FK-500), scope CLUB_ADMIN по клубу
+  без второго запроса.
+- UI SmartDelete.tsx: кнопка удаления из списков — двухшаговое
+  подтверждение, структурированный 409 разбирается и превращается в
+  диалог с путём решения: «Удалить вместе с N заявками» (каскад,
+  красная кнопка) или «Открыть карточку»; склонение числительных.
+- UI TeamDetailPanel.tsx (новый, ~700 строк): шапка-профиль (эмблема
+  через MediaUpload с моментальным PATCH, счётчики, «На сайт»,
+  SmartDelete), вкладки Состав/Матчи/Основное; состав по сезонам
+  (селектор: сезоны команды + текущие из обзора; фильтр
+  отзаявленных; строки с фото/№/позицией/ролью/датами и действиями
+  правка-№/отзаявить/вернуть/удалить); «Добавить игрока» — поиск
+  существующих (подсветка судей с предупреждением) или создание
+  нового (+антидубль 409 с «это другой человек»); «Массово из CSV» —
+  вставка/файл с авто-кодировкой (readFileTextSmart), dry-run
+  «Проверить», отчёт по строкам; Матчи — последние 30 с переходом в
+  протокол; Основное — name/club/city с паттерном edits-поверх-данных
+  (без setState-в-эффекте, eslint react-hooks чист).
+- UI PersonDetailPanel.tsx (новый): шапка (фото, роли-чипы, «На
+  сайт», SmartDelete), мини-статистика (голы/пасы/матчи/судейство/
+  дискв./аккаунты), полный редактор профиля (ФИО/ДР/пол/позиция/
+  специализации-чипы с конфликтом «судья≠игрок»), история заявок с
+  действиями и переходом в команду.
+- UI навигация: AdminShell — состояния focusTeamId/focusPersonId,
+  рендер карточек поверх секций, хлебные крошки внутри панелей,
+  сброс при смене раздела; ClubsTeamsPanel/PeoplePanel — клик по
+  имени открывает карточку, карандаш = quick-edit (для команды — с
+  подсказкой «полная карточка по клику»), SmartDelete только для
+  LEAGUE_ADMIN+; RegistrationsPanel — новый блок «Составы сезона по
+  командам» (клик по команде/игроку → карточки, действия
+  отзаявить/вернуть/удалить).
+- Верификация: eslint 0 (попутно устранены setState-в-эффекты),
+  tsc 0, unit 78/78, next build зелёный; НОВЫЙ дымовой тест
+  scripts/smoke-entities.ts — 24/24 на живом dev-сервере (вход,
+  полное ЖВ: создание лиги/сезона/команды/персон/заявок, правка №,
+  отзаявка/возврат, карточки, структурированные 409, каскадные
+  удаления команды и персоны, чистка данных, 404 в удалённую
+  команду). Грабли: конфликт top-level имён скриптов в tsconfig —
+  символы smoke-скрипта переименованы (SBASE/sapi/scheck).
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-14-entities.git-bundle → тег v1.0.17
+  (миграций нет — изменения логические/клиентские).
+- Сценарий юзера решён: команда «0 матчей, 5 заявок» — корзина →
+  «Точно» → диалог «Удалить вместе с 5 заявками» → готово; профиль
+  с 1 заявкой — аналогично каскадом; «непонятная админка» →
+  клик по сущности открывает её полноценную карточку.
+- Дальше (кандидаты): карта игрока на публичном сайте с фото из
+  карточки; bulk-фото zip; soft-delete/архив для персон с историей.
+
+---
+Task ID: 20
+Agent: Super Z (main)
+Task: Фидбек юзера после v1.0.18 — чистка карточки матча на клиенте
+по принципу «единой точки знаний» (7 пунктов) + бандл. Сеанс начат
+с незавершённого WIP-коммита bb883bc прошлого сеанса (бригада матча,
+stoppage-минуты, замены одной строкой, merge команд, BulkBar —
+верифицирован и включён в поставку как есть).
+
+Work Log:
+- Аудит WIP bb883bc: MatchTimeline.tsx (новый компонент, ось минут
+  в центре), MatchPage (RefereeBlock с бригадой), MatchDayView
+  (компактный фильтр даты), ProtocolEditor (вкладка «Бригада»,
+  45+3, SUBSTITUTION), merge команд-правопреемников, BulkBar,
+  схема: MatchOfficial + MatchEvent.stoppage. Грабля диагностики:
+  вывод bash-инструмента съедает «[m» как ANSI-escape — файл был
+  цел (подтверждено od -c), не «порча» кода.
+- п.1: из TimelineTab (клиент) убрана шапка с названиями команд;
+  MatchTimeline +prop className, клиент передаёт
+  [&>div:first-child]:border-t-0 (без лишней линии под табами).
+  В админке (ProtocolEditor) шапка оставлена — рабочий контекст.
+- п.2: зеркальная раскладка — события хозяев теперь [фамилия (ассист)]
+  [иконка] от центра (иконка у оси, ассист у края), у гостей
+  [иконка][фамилия (ассист)] — как просил юзер; заменено для событий
+  и для строк замен.
+- п.3: из геря убраны инфо-чипы (дата/тур/стадион/судья/статус) —
+  всё в превью; «Завершён» пишется под счётом (COMPLETED).
+- п.4: TeamHeroColumn — только герб, название, «хозяева/гости»;
+  позиция/очки, серия (StreakMark), бомбардир, новый тренер убраны
+  (живут в превью). Импорты StatusBadge/StreakMark вычищены.
+- п.5: карточка «Судья» из верхней сетки превью убрана (сетка
+  3 карточки: Начало/Стадион/Турнир) — бригада целиком в одном
+  блоке «Судейская бригада» внизу (главный + помощники/VAR/инспектор
+  из m.officials; WIP уже отдал officials из getMatchDetail).
+- п.6: легенда «Подсвечены команды этого матча — места до/после»
+  из StandingsTab убрана.
+- п.7: matchSignals + homeName/awayName (fallback «Хозяева/Гости»);
+  тексты: «Матч за 1-е место: X — Y» / «X и Y борются за место в
+  таблице — до конца турнира остался N тур(а/ов)» / «X и Y борются
+  за призовые места»; все 3 вызова (public.ts ×2, profiles.ts)
+  передают названия; легенда ленты (Trophy) синхронизирована.
+- Верификация: tsc 0, eslint 0, unit 79/79, next build зелёный.
+- Бандл: make-archives.sh → 2026-09-15-protocol (ONEFILE, README
+  поставки с предупреждением об аддитивных изменениях схемы —
+  prisma db push добавит MatchOfficial + stoppage). Проверка бандла
+  во временном репо: HEAD-сообщение, файлы, зеркальность, тексты,
+  отсутствие дублей — всё ок.
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-15-protocol.git-bundle (579 КБ) → тег
+  v1.0.19. ЕСТЬ изменения БД (аддитивные): таблица MatchOfficial,
+  колонка MatchEvent.stoppage — деплой применит их автоматически.
+- В поставку вошёл и WIP прошлого сеанса: бригада, добавленное
+  время, замены одной строкой, merge команд, BulkBar — юзер ещё не
+  видел эти фичи в проде (v1.0.18 их не содержит).
+
+---
+Task ID: 21
+Agent: Super Z (main)
+Task: Фидбек юзера после v1.0.19 — 9 пунктов: хронология 45+X/Перерыв,
+бригада «сам себе помощник», фильтр дат, судьи без оценки, составы
+старт/запас + значки участия, ширина сайта 800px, рекламная платформа
+(фон/верх/низ + предпросмотр + маркировка + фикс двойного нажатия),
+однофамильцы при массовом импорте + бандл.
+
+Work Log:
+- п.1 Хронология (MatchTimeline): сортировка ключом (тайм, минута) —
+  события 45+X первого тайма ВСЕГДА раньше второго тайма и маркера;
+  условие маркера «Перерыв» — minute >= 46 (было effMinute > 45, из-за
+  чего 45+3 вставало ПОСЛЕ перерыва); у COMPLETED-матча «Перерыв»
+  выводится всегда — и без событий 2-го тайма, и при пустом протоколе
+  (TimelineTab пропускает EmptyState для завершённых). buildRows
+  экспортирована для тестов.
+- п.2 Бригада: PATCH /matches/[id] — one-role-per-person (422 «Персона
+  уже в бригаде в роли …»); action referee — автоудаление других ролей
+  этого человека; action official — 409 при повторе персоны; в UI
+  ProtocolEditor занятые персоны блокируются в селектах с пометкой.
+- п.3 Фильтр дат (MatchDayView): убраны «Сегодня/Вчера/Завтра», кнопка
+  w-52 фиксированной ширины, только «Среда, 16 сентября».
+- п.4 Судьи: из RefereeBlock (MatchPage) убраны оценка (средняя, звёзды,
+  форма) и комментарий — только карточка главного + сетка бригады;
+  ratings убраны из DTO типа страницы (API оценок не тронут — профиль
+  судьи на PlayerPage сохраняет рейтинг).
+- п.5 Составы: action lineup принимает starters[] (isStarter из него;
+  легаси-вызовы без starters = все стартовые); ProtocolEditor —
+  чекбокс «в протоколе» + кнопка «Старт/Запас» на каждом выбранном,
+  счётчики «старт N · запас M», onField теперь от стартового состава
+  (+замены); клиент LineupsTab — «Стартовые · N» / «Запасные · N» и
+  значки участия (BallIcon/CardIcon/↑↓/А + минута) у COMPLETED/LIVE.
+- п.6 Ширина: SiteShell — контентная колонка max-w-[800px] (шапка,
+  формат-меню, main, футер); левый сайдбар → сворачиваемый блок
+  «Лиги · таблицы · избранное» на главной; правая колонка → витрина
+  RightRail layout="grid" под лентой (баннер+матч тура+результативный
+  сеткой, топ игроков на всю ширину).
+- п.7+8 Реклама: Banner += imageFit/imagePos/markSize/markOpacity
+  (nullable, аддитивно); placements += BOTTOM, BACKGROUND (валидация
+  фону без картинки 422, кегль 6–16, прозрачность 20–100);
+  BannersPanel переписан: фикс «двух нажатий» (MediaUpload
+  onUploadingChange + функциональный setForm-гард; кнопка «Создать»
+  ждёт загрузку), живой BannerPreview (полосы 800×90/блок 300×250/
+  мини-макет сайта для фона), селекты масштаба/позиции, поля
+  маркировки; публичный рендер: AdMark (visuals) с настройками,
+  фоновый слой fixed inset-0 z-0 за колонкой, маркировка на обоих
+  краях (xl+), TOP/BOTTOM внутри колонки, BannerSlot с objectFit.
+- п.9 Импорт: однофамилец без ДР/отчества при заявке в ДРУГУЮ команду
+  сезона → отдельный профиль + сообщение «однофамилец — создан
+  отдельный профиль (потом можно смёржить)»; повторный импорт в ту же
+  команду идемпотентен. Попутно найдена и закрыта грабля коллации:
+  в базах с datcollate=C LOWER() не складывает кириллицу и
+  mode:insensitive молча не матчит — sameFio ищет теперь и по
+  исходному написанию (OR equals raw/lower).
+- Грабли сессии: (1) у дев-сервера в памяти оставался старый
+  Prisma-клиент после prisma generate → banner.create 500 «unknown
+  arg imageFit» — лечится рестартом сервера; (2) shell-окружение
+  содержит чужой DATABASE_URL=file:… — для всех CLI-команд prisma
+  переопределял вручную; (3) смок-тест с undefined personId в
+  officials случайно очистил бригады двух демо-матчей — восстановлены
+  по аудиту (судья Артемьев); (4) топ-level имена смок-скриптов
+  конфликтуют в tsconfig — символы smoke-v1020 переименованы
+  (SB20/AP20/sc20/sck20/sp20).
+- Верификация: tsc 0, eslint 0, unit 85/85 (+6 новых тестов
+  хронологии: 45+3 до «Перерыва», раньше 46-й, маркеры завершённого
+  без событий 2-го тайма/пустого протокола, LIVE/SCHEDULED без
+  маркеров), next build зелёный, SMOKE scripts/smoke-v1020.ts 21/21
+  на живом сервере (баннеры всеми слотами + рендер 800px/фона/
+  маркировки на главной, дубль-роль 422, состав старт/запас, импорт
+  однофамильца латиницей и кириллицей, уборка за собой).
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-17-ads.git-bundle (595 КБ) → тег v1.0.20.
+  Изменения БД аддитивные: Banner.imageFit/imagePos/markSize/
+  markOpacity (nullable) — деплой применит автоматически.
+- Сайт теперь колонкой 800px: реклама размещается фоном (BACKGROUND),
+  полосами (TOP/BOTTOM) и блоками виджетов (RIGHT_TOP/RIGHT_BOTTOM);
+  маркировка «Реклама» деликатная и настраиваемая.
+- Дальше (кандидаты): показ фонового баннера и на внутренних страницах
+  с другими позициями маркировки; стакан баннеров по приоритету/датам
+  ротации; матч-центр LIVE-таба; undo для BulkBar.
+
+---
+Task ID: 22
+Agent: Super Z (main)
+Task: Юзер принёс внешний security/quality-разбор проекта (32 пункта,
+уровни 🔴🟠🟡) и спросил: насколько информация правдива и нужен ли
+рефакторинг. Аналитическая задача — верификация каждого пункта по коду.
+
+Work Log:
+- Проверены все 32 пункта по актуальному дереву (включая наработки
+  v1.0.20): bun.lock, auth.ts, clubs/teams API, media+nginx, schema
+  .prisma, ci/cd.yml, eslint.config.mjs, deploy.sh, package.json,
+  login/otp, health, seo.tsx, sitemap, Dockerfile, brand.ts, размеры
+  компонентов (wc), импорты 25+ пакетов, импорты ui/* из app-кода.
+- npm registry: next latest=16.3.5; 16.3.3 выпущен 2026-08-25,
+  16.2.11 — 2026-07-21 (даты релиза безопасности у рецензента ТОЧНО
+  совпадают с registry). В bun.lock зафиксирован next@16.1.3.
+- Результат: 30/32 пункта подтверждены полностью (с file:line), 2
+  (мусор __MACOSX/.DS_Store и .git в ZIP) непроверяемы в репо, но
+  правдоподобны. Номера строк и цитаты кода у рецензента точные.
+- Нюансы: разбор сделан по снапшоту v1.0.19 (ProtocolEditor был ~959,
+  сейчас 1027; MatchPage был 775, стал 739); date-fns и
+  @hookform/resolvers тоже не импортируются (список рецензента не
+  исчерпан); CLUB_ADMIN кроме clubs/teams пишет ещё в persons/
+  stadiums/customroles/media/import без скоупа клуба (шире, чем
+  заявлено; частично by design).
+- Ответ юзеру: детальный вердикт по всем пунктам + поэтапный план
+  рефакторинга (P0 security-хотфикс v1.0.21 → Next 16.3.x → модель
+  данных/миграции → гигиена). Полный текст — в ответе чата.
+
+Stage Summary:
+- Разбор достоверен на ~100% по проверяемым пунктам; это качественный
+  аудит, не фантазии. Рефакторинг нужен, но поэтапный, начиная с
+  security-пакета (isActive, AUTH_SECRET, BOLA clubs/teams, nginx 12m,
+  audit-fail, ignoreBuildErrors) — кандидат в v1.0.21.
+
+---
+Task ID: 23
+Agent: Super Z (main)
+Task: Этап 0 security-хотфикса по итогам аудита (32 пункта, см.
+Task 22): закрыть все 🔴-дыры, не требующие обновления Next и смены
+модели данных.
+
+Work Log:
+- ГРАБЛЯ СЕССИИ (критично для будущих задач): платформенный снапшот
+  воскресил 82 файла старых эпох (TUTORIAL/ANALYTICS, старые api-роуты,
+  src/instrumentation.ts с edge-ошибкой, sqlite-бэкапы) и ОТКАТИЛ 12
+  текущих файлов (StandingsView, AdminLogin, api.test.ts и др.).
+  Лечение: cp worklog.md .git/…, git reset --hard d0f0f57 (последний
+  зелёный Task 21), git clean -fd, возврат worklog. Проверять дерево
+  `git diff HEAD~ —name-status` в начале каждого сеанса!
+- Лечение dev-сервера: .env в песочнице содержит чужой
+  DATABASE_URL=file:…sqlite; правильный — embedded-postgres из
+  .zscripts (postgresql://postgres:postgres@127.0.0.1:5432/scoresbox).
+  dev.sh платформы его экспортит; вручную запускать с этим env.
+- п.5 (isActive): getSessionUser теперь `if (!user || !user.isActive)
+  return null` — блокировка SUPER_ADMIN-ом убивает выданные сессии,
+  requireRole автоматически 401.
+- п.6 (AUTH_SECRET): resolveSecret() — env → (production && не фаза
+  сборки) ? throw : dev-fallback. NEXT_PHASE=phase-production-build
+  exempt: next build импортирует роуты с NODE_ENV=production, там
+  placeholder безвреден. Runtime standalone без AUTH_SECRET: роуты
+  падают с внятной ошибкой (проверено на живой standalone-сборке:
+  login 500 + лог «AUTH_SECRET не задан…», с секретом — 200).
+  Дублирование защиты: scripts/deploy.sh `: "${AUTH_SECRET:?…}"`
+  ДО касания БД/контейнеров.
+- п.2 (BOLA clubs): PATCH /clubs/[id] — CLUB_ADMIN только свой клуб
+  (403); POST /clubs — только LEAGUE_ADMIN/SUPER_ADMIN.
+- п.3 (BOLA teams create): POST /teams — CLUB_ADMIN форсирует
+  targetClubId=user.clubId (переданный чужой clubId игнорируется);
+  без клуба у юзера — 403.
+- п.4 (BOLA teams transfer): PATCH /teams/[id] — CLUB_ADMIN не может
+  менять принадлежность (data.clubId=user.clubId), перенос — только
+  LEAGUE_ADMIN/SUPER_ADMIN.
+- п.7 (upload): client_max_body_size 2m → 12m в deploy/nginx.conf и
+  scripts/setup-nginx.sh (backend 6/10 МБ + multipart-запас).
+  ⚠️ На живом сервере /etc/nginx НЕ обновится сам — см. README поставки.
+- п.12 (audit): ci.yml — убран `|| echo`, critical теперь реально
+  ломает CI. Проверено локально: bun audit --level critical = exit 1
+  (3 critical: 2×Next.js RCE, 1×next-auth homoglyph — мёртвая
+  зависимость). CI будет красным до Этапа 1 (Next 16.3.x) — by design.
+- п.10 (types): next.config.ts — ignoreBuildErrors удалён; tsc чист,
+  next build зелёный с проверкой типов.
+- п.14 (db:push): package.json — db:push без флага, опасный вынесен
+  в db:push:destructive. CI/deploy вызывают prisma напрямую — не задет.
+- Верификация: eslint 0 ошибок (1 давний warning в timeline.test.ts),
+  tsc 0, unit 85/85, next build зелёный, SMOKE scripts/smoke-sec21.ts
+  21/21 (BOLA-фиксы, перенос только лигой, блокировка→401 старой
+  сессии→403 входа→разблокировка, уборка за собой), standalone-тест
+  AUTH_SECRET fail-fast.
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-17-security.git-bundle → тег v1.0.21.
+  Изменений схемы БД НЕТ — деплой без миграций.
+- Все 🔴 закрыты, кроме Next.js 16.1.3 (Этап 1) и модели трансферов
+  (Этап 2). CI audit-job теперь честно красный до Этапа 1.
+- Перед деплоем v1.0.21 обязательно: AUTH_SECRET в /opt/scoresbox/.env
+  (и рекомендовано перевыпустить: openssl rand -hex 32 — старые сессии
+  слетят), nginx client_max_body_size 12m на сервере вручную.
+
+---
+Task ID: 24
+Agent: Super Z (main)
+Task: Этап 1 плана рефакторинга (по итогам аудита Task 22):
+обновление Next.js 16.1.3 → 16.3.5 с закрытием всех critical-
+уязвимостей зависимостей и полной верификацией на живом сервере.
+
+Work Log:
+- ГРАБЛЯ ИНСТРУМЕНТАЛЬНОЙ СЕССИИ (критично для будущих задач):
+  конструкция `(exec 3<>/dev/tcp/127.0.0.1/5432)` УБИВАЕТ сессию
+  наглухо (403 broken session на ВСЕ инструменты после первого
+  применения). Диагноз по логу 4 обрывов: все падавшие вызовы
+  содержали /dev/tcp, все успешные — нет. ЛЕЧЕНИЕ: TCP-чеки только
+  через `node -e "net.connect(...)"`, фоновые процессы — через
+  лаунчер-скрипт с setsid+nohup+FD-redirect (см.
+  scripts/smoke-standalone.sh). Перезапуски сессии не помогают,
+  если бэкенд лёг целиком (тогда ждать ~5 мин).
+- Зависимости: next 16.1.3→16.3.5 (registry: релиз 2026-09-11;
+  peer react ^19.0.0 совместим с react@19.2.3), eslint-config-next
+  16.3.5, sharp 0.34.5→0.35.4 (2 high CVE в libvips на пути
+  обработки пользовательских аплоадов — тот же вектор угроз, что
+  Next AVIF RCE; API-совместимость подтверждена живым тестом).
+- next-auth УДАЛЁН из dependencies (0 импортов в src/, Lock чист):
+  critical GHSA-7rqj-j65f-68wh (homoglyph-байпас email-
+  нормализации). Формально был планом Этапа 3, но critical-гейт CI
+  (введён в Этапе 0) не зеленеет без этого — перенос обоснован.
+- 🐛 НЮНС ci.yml (найден при проверке): флаг Этапа 0 был
+  `bun audit --level critical` — НО bun игнорирует `--level`
+  молча, правильный флаг `--audit-level=critical`. Гейт работал
+  строже задуманного (падал от любой уязвимости, не только
+  critical) — счастье, что это маскировалось наличием 3 critical.
+  Исправлено на --audit-level=critical.
+- 🐛 scripts/smoke-sec21.ts: 19×TS1375 (top-level await без
+  module) — файл создавался ПОСЛЕ tsc-проверки Этапа 0. Фикс:
+  export {}.
+- Верификация статики: bun audit --audit-level=critical = 0
+  vulns, exit 0 (было 3 critical); tsc 0; eslint 0 ошибок (2
+  warning: давний в timeline.test.ts + НОВЫЙ от eslint-config-next
+  16.3.5 — правило no-location-assign-relative-destination на
+  portal/router.ts:61; это осознанный pre-hydration fallback,
+  рефакторить навигацию в рамках апгрейда не стали — Этап 3);
+  unit 85/85; next build зелёный (Next.js 16.3.5, Turbopack,
+  18.2с, 0 предупреждений).
+- Верификация динамики (embedded-postgres + standalone-сервер
+  Next 16.3.5 на :3000, AUTH_SECRET передан явно): HTTP-смоук —
+  / 200, /admin 200, /api/public/overview 200,
+  /api/public/matches?seasonId 200, /match/[id] SSR 200 с
+  контентом, /login 404 (ожидаемо — роут перенесён в панель);
+  security-смоук smoke-sec21.ts 21/21 (BOLA-фиксы Этапа 0
+  работают на 16.3.5); media-смоук smoke-media22.ts 8/8
+  (sharp 0.35.4: полный цикл PNG 1600x1200 → WebP ≤1200px →
+  БД → выдача → удаление, размер уменьшился).
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-17-next35.git-bundle → тег v1.0.22.
+  Изменений схемы БД НЕТ — деплой без миграций.
+- Все critical закрыты: 2×Next.js RCE (GHSA-p293-qw3h-jr36,
+  GHSA-2xp9-vwfh-vxw4) + next-auth GHSA-7rqj-j65f-68wh.
+  sharp: 2 high CVE сняты (libvips/libheif).
+- CI audit-job теперь ЗЕЛЁНЫЙ (0 critical) + флаг исправлен на
+  честную семантику. Осталось 52 high/moderate — почти всё в
+  мёртвых зависимостях и dev-цепочках: территория Этапа 3.
+- Деплой v1.0.22: обычный (docker compose pull && up -d);
+  особых шагов как в v1.0.21 НЕТ (AUTH_SECRET уже в .env с
+  прошлого релиза). Обновление фреймворка — риск регрессий UI,
+  после деплоя глазами проверить главную/матч/админку.
+
+---
+Task ID: 25
+Agent: Super Z (main)
+Task: Этап 2 плана рефакторинга (по аудиту Task 22): модель
+данных — миграции prisma, история заявок (partial unique index),
+P2002→409, индексы, sessionVersion, APP_VERSION, deploy без db push.
+
+Work Log:
+- ГРАБЛЯ БАШ-ВЫВОДА (важно!): отображение результатов Bash-инструмента
+  СЪЕДАЕТ последовательности вида «[m», «[h» (маркдаун-санитайзер
+  считает их началом ссылки). rg/sed вывод «@@unique(atchId…»
+  реально в файле — «@@unique([matchId…». Из-за этого была ложная
+  тревога «порчи файла», напрасный git checkout схемы и диагностика
+  MultiEdit-«порчи». Верно проверять содержимое Read-инструментом.
+- MultiEdit ведёт себя НЕ атомарно: часть правок применяется до
+  первой несовпадающей (несмотря на доки). Длинные old_str — источник
+  несовпадений (невидимое выравнивание пробелов: «createdAt      DateTime»
+  с 6 пробелами). Лечение: полная перезапись файла через Write.
+- ПЛАТФОРМА ПЕРЕСОЗДАЛА ПЕСОЧНИЦУ между Этапами 1 и 2: pgdata
+  (вне git) стёрт, dev.sh в 15:05 поднял пустую БД и перелил сид
+  (новые id cmu5nvm*). Прогон миграций фактически отработал на
+  «свежем проде» — оба сценария покрыты (легаси-режим отрепетирован
+  до пересоздания: 287 заявок + baseline resolve; свежий — после).
+- Миграции: prisma/migrations/{00000000000000_init (baseline = схема
+  v1.0.22, снята migrate diff --from-empty --to-schema-datasource с
+  живой легаси-БД), 00000000000001_stage2_data_model (20 CREATE INDEX
+  + partial unique + ALTER User ADD sessionVersion + гигиена
+  UPDATE Registration SET status=ENDED)} + migration_lock.toml.
+  Проверено: дрейф после deploy ПУСТОЙ, P2002-семантика живая
+  (возврат игрока ok, дубль активной отклоняется).
+- deploy.sh: db push → migrate deploy c авто-разметкой baseline
+  (psql-чек _prisma_migrations + таблицы User; чистая база → честный
+  init, легаси → resolve --applied). dev.sh песочницы — та же логика
+  через node+Prisma (плюс дефолт DATABASE_URL в смоуках: платформа
+  перезаписывает .env на sqlite). package.json + db:deploy.
+- Заявки: schema -@@unique([personId,teamId,seasonId]); код:
+  registrations POST findFirst(endDate:null) + 409; отзаявка
+  endDate+status ENDED (инвариант: закрытая = ENDED); import
+  дедуп по активной; merge (persons+teams) конфликт только
+  по активным заявкам. P2002→409 в errorResponse с подсказками
+  по ключам (Registration_active_…, User_email_key, …).
+- sessionVersion: токен несёт v (setSessionCookie(userId, v));
+  getSessionUser сверяет (легаси-токен без v = 0 — обновление
+  само по себе сессии не убивает); инкремент в users PATCH
+  resetPassword + resetTotp. smoke-stage22.ts: 24 проверки.
+- APP_VERSION: Dockerfile ARG + ENV; cd.yml build-push build-args
+  (тег релиза); /api/health отдаёт version; лаунчер смоука
+  экспортирует APP_VERSION=v1.0.23-smoke (проверено).
+- Отладочный квест смоука: 1) /api/auth/me на мёртвой сессии
+  отдаёт 200 {user:null}, а не 401 (проверки чинить на user==null);
+  2) сид-пароль club123 (7 симв.) короче API-лимита resetPassword
+  (8+) — восстановление в смоуке делаем прямо в БД; 3) dev-сервер
+  платформы держал УСТАРЕВШИЙ Prisma-клиент в памяти (turbopack
+  не перезагрузил node_modules после prisma generate) — сессии
+  валились «необъяснимо»; тестировать только standalone; 4) pg
+  + standalone поднимаются setsid-лаунчером — грабли /dev/tcp
+  из Task 24 не повторились.
+- Верификация: tsc 0, lint 0 (2 давних warning), unit 85/85,
+  build зелёный (16.3.5), миграционный дрейф пустой, смоук-серия:
+  stage22 24/24, sec21 21/21 (регрессия), media22 8/8 (регрессия),
+  HTTP /, /admin, /match/[id] SSR — 200.
+
+Stage Summary:
+- Бандл: scoresbox-2026-09-17-stage2.git-bundle → тег v1.0.23.
+- Схема меняется МИГРАЦИЕЙ (deploy.sh сам): 20 индексов + колонка
+  sessionVersion + partial unique + гигиена ENDED. Данные целы,
+  ручных шагов на сервере нет, бэкап pg_dump как прежде.
+- Осталось из аудита: Этап 3 (гигиена — мёртвые зависимости/файлы
+  ui, footballday.ru хвосты, CD-зависимость от CI, ESLint
+  прогрессивно, разборка ProtocolEditor/MatchPage).
