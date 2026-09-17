@@ -1,0 +1,170 @@
+# ============================================================
+# SCORESBOX · CD — поставка в продакшен (уровень крупной организации)
+# Триггеры: semver-тег v1.2.3 или ручной запуск (environment=production,
+# требует аппрува — настроить в Settings → Environments).
+# Пайплайн:
+#   1. quality+integration обязательны (через ci.yml на том же коммите)
+#   2. сборка и push образа в GHCR с двумя тегами: sha и версия
+#   3. деплой на VPS по SSH: образ, миграции, health-check
+#   4. при неудачном health-check — автоматический откат на прошлый тег
+# Откат вручную: scripts/rollback.sh на сервере или rerun с прежним тегом.
+# ============================================================
+
+name: CD
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: "Введите DEPLOY для запуска поставки"
+        required: true
+        default: ""
+
+concurrency:
+  group: cd-production
+  cancel-in-progress: false
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository }}
+  # версия = тег (v1.2.3 → 1.2.3) или sha для ручных запусков
+  VERSION: ${{ github.ref_type == 'tag' && github.ref_name || github.sha }}
+
+# Базовые права для всех джобов (GITHUB_TOKEN)
+permissions:
+  contents: read
+
+jobs:
+  # ---------- 1. Сборка и публикация образа ----------
+  build:
+    name: Build & push (GHCR)
+    runs-on: ubuntu-latest
+    # БЕЗ packages: write push в GHCR падает:
+    # «denied: installation not allowed to Create organization package»
+    permissions:
+      contents: read
+      packages: write
+    environment: production
+    timeout-minutes: 20
+    outputs:
+      image_tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Ручной запуск требует явного подтверждения
+        if: github.event_name == 'workflow_dispatch' && inputs.confirm != 'DEPLOY'
+        run: |
+          echo "::error::Ручной запуск без подтверждения: введите DEPLOY в поле confirm"
+          exit 1
+
+      - uses: docker/setup-buildx-action@v4
+
+      - name: Логин в GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Метаданные образа
+        id: meta
+        run: echo "tag=${VERSION#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Сборка и push (sha + версия + latest)
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.tag }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------- 2. Деплой на сервер ----------
+  deploy:
+    name: Deploy → VPS
+    runs-on: ubuntu-latest
+    needs: build
+    # для docker pull на сервере достаточно чтения пакетов
+    permissions:
+      contents: read
+      packages: read
+    environment: production
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Синхронизация файлов деплоя на сервер (scripts + compose)
+        # /opt/scoresbox может содержать УСТАРЕВШИЕ файлы, залитые когда-то
+        # вручную с Windows (например, старый deploy.sh времён scores21,
+        # который тянет alpine и падает на 429 Docker Hub). Каждый деплой
+        # приносит на сервер АКТУАЛЬНЫЕ scripts/ и compose из этого же коммита.
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          source: "scripts/deploy.sh,scripts/rollback.sh,scripts/status.sh,deploy/docker-compose.prod.yml"
+          target: "/opt/scoresbox"
+          overwrite: true
+
+      - name: Деплой через SSH (sync → backup → migrate → up → health → admin-bootstrap)
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/scoresbox
+
+            # бит x для ручных вызовов rollback (bash-вызов из CI не зависит)
+            chmod +x scripts/*.sh 2>/dev/null || true
+
+            # логин в GHCR: образ может быть приватным (repo private по умолчанию)
+            echo "${{ secrets.GITHUB_TOKEN }}" | \
+              docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+            # конфиг деплоя: env-файл читает scripts/deploy.sh (.deploy/env)
+            mkdir -p .deploy
+            echo "DEPLOY_IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}" > .deploy/env
+            # bash вместо ./ — бит исполнения может теряться при заливке
+            # файлов на сервер с Windows (exit 126 «Permission denied»)
+            bash scripts/deploy.sh "${{ needs.build.outputs.image_tag }}"
+
+      - name: "Пост-деплой: внешний health-check (главная отвечает 200)"
+        run: |
+          for i in $(seq 1 15); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' "${{ secrets.DEPLOY_PUBLIC_URL }}/" || true)
+            if [ "$code" = "200" ]; then
+              echo "✅ прод живой (HTTP 200)"; exit 0
+            fi
+            sleep 4
+          done
+          echo "::error::главная страница не отвечает 200 — запустите откат: job rollback или scripts/rollback.sh на сервере"
+          exit 1
+
+  # ---------- 3. Откат (ручной, отдельный job с approval) ----------
+  rollback:
+    name: Rollback (ручной)
+    runs-on: ubuntu-latest
+    environment: production-rollback
+    # откат нужен только если УПАЛ ДЕПЛОЙ (деплой на сервер реально стартовал);
+    # при падении сборки/пропуске deploy — откат не нужен и не запускается
+    if: needs.deploy.result == 'failure' && github.event_name != 'workflow_dispatch'
+    needs: deploy
+    steps:
+      - name: Откат на предыдущий рабочий тег
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          script: |
+            set -euo pipefail
+            cd /opt/scoresbox
+            bash scripts/rollback.sh
