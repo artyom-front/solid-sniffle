@@ -1,0 +1,331 @@
+// Milestone 3: жизненный цикл матча — валидации, события протокола,
+// завершение, техпоражения (Epic 2), журнал аудита (инвариант №4).
+
+import { db } from "@/lib/db";
+import { HttpError } from "@/lib/http";
+import type { SessionUser } from "@/lib/auth";
+import { assertNotSuspended, processMatchDiscipline, revertMatchDiscipline } from "./discipline";
+
+// ---------- Аудит (инвариант №4) ----------
+
+export async function audit(
+  user: SessionUser | null,
+  entity: string,
+  entityId: string,
+  action: string,
+  oldValue: unknown,
+  newValue: unknown
+) {
+  await db.auditLog.create({
+    data: {
+      userId: user?.id ?? null,
+      userEmail: user?.email ?? "system",
+      entity,
+      entityId,
+      action,
+      oldValue: oldValue === undefined ? null : JSON.stringify(oldValue),
+      newValue: newValue === undefined ? null : JSON.stringify(newValue),
+    },
+  });
+}
+
+// ---------- Валидации ----------
+
+export interface EligiblePlayer {
+  personId: string;
+  name: string;
+  position: string | null;
+  /** Номер из сезонной заявки (Registration) — у любителей обычно пуст */
+  number: number | null;
+  /** Роль в заявке (PLAYER/COACH/ADMINISTRATOR/…) — игроки vs штаб */
+  regRole: string;
+  /** Номер из ПОСЛЕДНЕГО матча этой команды до текущего — предзаполнение */
+  lastNumber: number | null;
+  registrationOk: boolean;
+  suspension: { matchesRemaining: number; isLifetime: boolean; source: string } | null;
+}
+
+/**
+ * Epic 3 (валидация заявки): игрок активно заявлен за команду именно на дату матча
+ * (учёт дат регистрации и трансферов).
+ */
+export async function isRegisteredOn(personId: string, teamId: string, seasonId: string, date: Date): Promise<boolean> {
+  const reg = await db.registration.findFirst({
+    where: {
+      personId,
+      teamId,
+      seasonId,
+      startDate: { lte: date },
+      OR: [{ endDate: null }, { endDate: { gte: date } }],
+    },
+  });
+  return !!reg;
+}
+
+/** Последние номера игроков команды: номер из последнего матча ДО даты —
+ *  любительская практика: заявка на сезон без номеров, номер живёт в протоколе
+ *  матча. Возвращает personId → номер (первое вхождение = самый свежий матч). */
+export async function getLastNumbers(teamId: string, before: Date): Promise<Map<string, number>> {
+  const rows = await db.lineupEntry.findMany({
+    where: { teamId, number: { not: null }, match: { kickoff: { lt: before } } },
+    orderBy: { match: { kickoff: "desc" } },
+    select: { personId: true, number: true },
+  });
+  const map = new Map<string, number>();
+  for (const r of rows) if (!map.has(r.personId)) map.set(r.personId, r.number!);
+  return map;
+}
+
+/** Список игроков, доступных для протокола, с флагами регистрации/дисквалификации.
+ *  Товарищеский матч (без этапа): активные заявки команды в ЛЮБОМ сезоне —
+ *  без дисциплинарных флагов (дисквалификации — скоуп турнира). */
+export async function getEligiblePlayers(matchId: string, teamId: string): Promise<EligiblePlayer[]> {
+  const match = await db.match.findUnique({
+    where: { id: matchId },
+    include: { stage: { include: { season: true } } },
+  });
+  if (!match) throw new HttpError(404, "Матч не найден");
+
+  // предзаполнение номеров: последний номер игрока в этой команде
+  const lastNumbers = await getLastNumbers(teamId, match.kickoff);
+
+  if (!match.stage) {
+    // товарищеский: последняя активная заявка каждого игрока этой команды
+    const regs = await db.registration.findMany({
+      where: {
+        teamId,
+        startDate: { lte: match.kickoff },
+        OR: [{ endDate: null }, { endDate: { gte: match.kickoff } }],
+      },
+      include: { person: true, season: { select: { startDate: true } } },
+      orderBy: { startDate: "desc" },
+    });
+    const seen = new Set<string>();
+    const result: EligiblePlayer[] = [];
+    for (const r of regs) {
+      if (seen.has(r.personId)) continue;
+      seen.add(r.personId);
+      result.push({
+        personId: r.personId,
+        name: `${r.person.lastName} ${r.person.firstName}`,
+        position: r.person.position,
+        number: r.number,
+        regRole: r.role,
+        lastNumber: lastNumbers.get(r.personId) ?? null,
+        registrationOk: true,
+        suspension: null,
+      });
+    }
+    return result.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+  }
+
+  const regs = await db.registration.findMany({
+    where: {
+      teamId,
+      seasonId: match.stage.seasonId,
+      startDate: { lte: match.kickoff },
+      OR: [{ endDate: null }, { endDate: { gte: match.kickoff } }],
+    },
+    include: { person: true },
+  });
+
+  const result: EligiblePlayer[] = [];
+  for (const r of regs) {
+    const suspension = await db.suspension.findFirst({
+      where: { personId: r.personId, seasonId: match.stage.seasonId, isActive: true },
+    });
+    const active =
+      suspension && (suspension.isLifetime || suspension.matchesServed < suspension.matchesTotal)
+        ? {
+            matchesRemaining: suspension.isLifetime ? -1 : suspension.matchesTotal - suspension.matchesServed,
+            isLifetime: suspension.isLifetime,
+            source: suspension.source,
+          }
+        : null;
+    result.push({
+      personId: r.personId,
+      name: `${r.person.lastName} ${r.person.firstName}`,
+      position: r.person.position,
+      number: r.number,
+      regRole: r.role,
+      lastNumber: lastNumbers.get(r.personId) ?? null,
+      registrationOk: true,
+      suspension: active,
+    });
+  }
+  return result.sort((a, b) => a.name.localeCompare(b.name, "ru"));
+}
+
+/**
+ * Валидация события протокола (PRD + v1.0.19):
+ * 1) матч не завершён; 2) участник — из ПРОТОКОЛА матча: если состав
+ *    подан, автор (и ассистент) обязаны быть в LineupEntry; если состав
+ *    ещё не подан — действует fallback-проверка заявки на дату матча;
+ * 3) участник не дисквалифицирован (Epic 1, инвариант блокировки).
+ *
+ * SUBSTITUTION: personId — вышедший на поле (как SUB_IN, состав не
+ * обязателен), assistPersonId — ушедший (проверяется по составу).
+ */
+export async function validateEvent(
+  matchId: string,
+  personId: string,
+  teamId: string,
+  assistPersonId?: string | null
+) {
+  const match = await db.match.findUnique({
+    where: { id: matchId },
+    include: { stage: { include: { season: true } } },
+  });
+  if (!match) throw new HttpError(404, "Матч не найден");
+  if (match.status === "COMPLETED") throw new HttpError(409, "Матч уже завершён — редактирование запрещено");
+  if (match.status === "WALKOVER") throw new HttpError(409, "Матч оформлен как техническое поражение — события недоступны");
+  if (teamId !== match.homeTeamId && teamId !== match.awayTeamId) {
+    throw new HttpError(422, "Команда не участвует в этом матче");
+  }
+
+  // Товарищеский матч: без заявки на сезон и без дисциплинарных ограничений
+  if (!match.stage || match.isFriendly) return match;
+  const seasonId = match.stage.seasonId;
+
+  const inLineup = async (pid: string): Promise<boolean> =>
+    !!(await db.lineupEntry.findFirst({ where: { matchId, teamId, personId: pid } }));
+  const lineupCount = await db.lineupEntry.count({ where: { matchId, teamId } });
+
+  // Правило v1.0.19: в событии участвует только игрок, внесённый в протокол.
+  // Пока состав не подан — проверяем заявку на дату матча (старое поведение).
+  const checkMembership = async (pid: string, label: string): Promise<void> => {
+    if (lineupCount > 0) {
+      if (!(await inLineup(pid))) {
+        throw new HttpError(409, `${label} не внесён в протокол матча (состав уже подан). Добавьте игрока в состав на вкладке «Составы».`);
+      }
+    } else {
+      const registered = await isRegisteredOn(pid, teamId, seasonId, match.kickoff);
+      if (!registered) {
+        throw new HttpError(409, `${label} не заявлен за эту команду на дату матча. Подайте состав на вкладке «Составы» — туда попадают только заявленные игроки.`);
+      }
+    }
+    await assertNotSuspended(pid, seasonId);
+  };
+
+  await checkMembership(personId, "Игрок");
+
+  if (assistPersonId) {
+    await checkMembership(assistPersonId, "Автор ассиста");
+  }
+
+  return match;
+}
+
+// ---------- Счёт ----------
+
+/** Гол с поля и пенальти — в пользу команды события; автогол — В ПОЛЬЗУ СОПЕРНИКА */
+export async function computeScore(matchId: string): Promise<{ home: number; away: number }> {
+  const events = await db.matchEvent.findMany({ where: { matchId } });
+  const match = await db.match.findUnique({ where: { id: matchId } });
+  if (!match) return { home: 0, away: 0 };
+  let home = 0;
+  let away = 0;
+  for (const e of events) {
+    if (e.type !== "GOAL" && e.type !== "PENALTY" && e.type !== "OWN_GOAL") continue;
+    const forHome = e.teamId === match.homeTeamId;
+    const own = e.type === "OWN_GOAL";
+    // автогол игрока команды X засчитывается сопернику
+    if ((forHome && !own) || (!forHome && own)) home++;
+    else away++;
+  }
+  return { home, away };
+}
+
+// ---------- Завершение матча ----------
+
+export async function completeMatch(matchId: string, user: SessionUser | null) {
+  const match = await db.match.findUnique({ where: { id: matchId }, include: { events: true } });
+  if (!match) throw new HttpError(404, "Матч не найден");
+  if (match.status === "COMPLETED") throw new HttpError(409, "Матч уже завершён");
+
+  // Инвариант (PRD §4): матч не может быть завершён без назначенного главного судьи
+  if (!match.refereeId) {
+    throw new HttpError(422, "Матч не может быть завершён без назначенного главного судьи");
+  }
+
+  const score = await computeScore(matchId);
+
+  const oldValue = {
+    status: match.status,
+    homeScore: match.homeScore,
+    awayScore: match.awayScore,
+  };
+
+  // v1.0.24 (аудит Task 27 🟠-3): статус и дисциплинарные последствия —
+  // ОДНА транзакция. Раньше сбой посередине оставлял матч COMPLETED без
+  // дисциплинарной обработки (или наоборот). Внутри — повторная проверка
+  // статуса: двойной complete из двух вкладок не задвоит отсиживание банов.
+  await db.$transaction(async (tx) => {
+    const fresh = await tx.match.findUnique({ where: { id: matchId }, select: { status: true } });
+    if (!fresh) throw new HttpError(404, "Матч не найден");
+    if (fresh.status === "COMPLETED") throw new HttpError(409, "Матч уже завершён");
+    await tx.match.update({
+      where: { id: matchId },
+      data: { status: "COMPLETED", homeScore: score.home, awayScore: score.away },
+    });
+
+    // Дисциплинарная обработка (Epic 1): красные, ЖК-накопление, отсиживание.
+    // Товарищеские матчи (без этапа) — БЕЗ дисциплинарных последствий.
+    if (match.stageId) {
+      await processMatchDiscipline(matchId, tx);
+    }
+  });
+
+  // Инвариант №3 (Event-Driven): в проде здесь публикация события в BullMQ
+  // (пересчёт таблиц, генерация карточек, рассылка). В демо пересчёт ленивый — при чтении.
+  await audit(user, "Match", matchId, "COMPLETE", oldValue, {
+    status: "COMPLETED",
+    ...score,
+    eventsCount: match.events.length,
+  });
+
+  return score;
+}
+
+/** Reopen: вернуть матч в работу (только супер-админ, с откатом дисциплинарных последствий) */
+export async function resetMatch(matchId: string, user: SessionUser | null) {
+  const match = await db.match.findUnique({ where: { id: matchId } });
+  if (!match) throw new HttpError(404, "Матч не найден");
+  const oldValue = { status: match.status, homeScore: match.homeScore, awayScore: match.awayScore, walkoverType: match.walkoverType };
+
+  // v1.0.24 (аудит Task 27 🟠-3): возврат в работу и откат дисциплины —
+  // одна транзакция: сбой больше не оставляет SCHEDULED со stale-банами.
+  await db.$transaction(async (tx) => {
+    await tx.match.update({
+      where: { id: matchId },
+      data: { status: "SCHEDULED", homeScore: null, awayScore: null, walkoverType: null },
+    });
+    if (match.stageId) {
+      await revertMatchDiscipline(matchId, tx);
+    }
+  });
+  await audit(user, "Match", matchId, "RESET", oldValue, { status: "SCHEDULED" });
+}
+
+/** Epic 2: назначение технического поражения */
+export async function assignWalkover(matchId: string, walkoverType: "HOME" | "AWAY" | "BOTH", user: SessionUser | null, note?: string) {
+  const match = await db.match.findUnique({ where: { id: matchId }, include: { events: true } });
+  if (!match) throw new HttpError(404, "Матч не найден");
+  if (match.status === "COMPLETED") throw new HttpError(409, "Матч уже сыгран — сначала верните его в работу");
+
+  const oldValue = { status: match.status, walkoverType: match.walkoverType };
+
+  // v1.0.24 (аудит Task 27 🟠-3): события/составы удаляются ТОЛЬКО вместе
+  // со сменой статуса — единой транзакцией. Раньше сбой между deleteMany и
+  // update оставлял матч без протокола, но ещё не WALKOVER (полу-состояние).
+  await db.$transaction([
+    db.matchEvent.deleteMany({ where: { matchId } }),
+    db.lineupEntry.deleteMany({ where: { matchId } }),
+    db.match.update({
+      where: { id: matchId },
+      data: { status: "WALKOVER", walkoverType, homeScore: null, awayScore: null, note: note ?? match.note },
+    }),
+  ]);
+
+  await audit(user, "Match", matchId, "WO_ASSIGN", oldValue, { status: "WALKOVER", walkoverType, note });
+}
