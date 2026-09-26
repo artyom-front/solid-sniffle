@@ -1,0 +1,211 @@
+# ============================================================
+# SCORESBOX · CI — проверка каждого PR и push в main
+# Уровень «крупной организации»: качество → интеграция → сборка.
+# Jobs:
+#   quality      — lint + typecheck + unit-тесты (быстро, ~1 мин)
+#   integration  — чистый PostgreSQL + сид + прод-сборка + 36 проверок
+#                  бизнес-правил + 2FA-флоу + smoke SSR/SEO
+#   docker       — сборка прод-образа (только main)
+#   audit        — bun audit (уязвимости зависимостей)
+# БД: PostgreSQL 16 (service-контейнер) — тот же движок, что и в проде.
+# ============================================================
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DATABASE_URL: postgresql://scoresbox:scoresbox@localhost:5432/scoresbox?schema=public
+  AUTH_SECRET: ci-secret-not-for-production
+  SHOW_DEMO_ACCOUNTS: "1"
+  SITE_URL: http://localhost:3100
+
+jobs:
+  # ---------- 1. Качество кода ----------
+  quality:
+    name: Lint · Typecheck · Unit
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          # ПИН: раннеры GitHub обновляются своим графиком (инцидент
+          # 2026-09-17: ушли на bun 1.4.x, CLI-синтаксис дрейфует).
+          # Фиксируем версию, на которой верифицированы lock и смоуки.
+          bun-version: 1.3.14
+
+      - name: Кэш зависимостей
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Установка зависимостей
+        run: bun install --frozen-lockfile
+
+      - name: Генерация Prisma-клиента
+        run: bunx prisma generate
+
+      - name: ESLint
+        run: bun run lint
+
+      - name: TypeScript (tsc --noEmit)
+        run: bun run typecheck
+
+      - name: "Аудит deps: импорты vs package.json"
+        # ИНЦИДЕНТ v1.0.25 (2026-09-23): «гигиена» снесла sonner как мёртвый,
+        # а 17 портальных файлов его импортировали — next build падал в Docker.
+        # tsc это ловит (TS2307), но этот шаг даёт внятный отчёт «какой пакет
+        # импортируется без объявления» ещё до компиляции. exit 1 = regression.
+        run: python3 scripts/check-deps.py
+
+      - name: "Unit-тесты (движки: TOTP, расписание, таблица, стрики)"
+        run: bun test tests/unit
+
+  # ---------- 2. Интеграционные тесты на прод-сборке ----------
+  integration:
+    name: Integration · 36 инвариантов PRD + 2FA + SSR
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    needs: quality
+
+    # PostgreSQL как service-контейнер: те же байты, что в проде
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: scoresbox
+          POSTGRES_PASSWORD: scoresbox
+          POSTGRES_DB: scoresbox
+        ports:
+          - 5432:5432
+        # ждём готовности БД до старта job-шагов
+        options: >-
+          --health-cmd "pg_isready -U scoresbox -d scoresbox"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Кэш зависимостей
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.bun/install/cache
+            node_modules
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - name: Установка зависимостей
+        run: bun install --frozen-lockfile
+
+      - name: Генерация Prisma-клиента
+        # v1.0.30-регрессия (2026-09-26): раньше клиент генерировался
+        # НЕЯВНО через `prisma db push` (db push всегда делает generate).
+        # Фикс v1.0.30 заменил db push на migrate deploy — а он клиент
+        # НЕ генерирует. Кэш node_modules отдавал клиент от схемы
+        # v1.0.28 (без FormatLink/StatBlock) → `bun run build` падал
+        # на type-check: 17× TS2339 «Property 'formatLink'/'statBlock'
+        # does not exist» — РОВНО на шаге ниже. Генерация теперь ЯВНАЯ
+        # (как в quality-job) + продублирована в `build`-скрипте
+        # package.json (prisma generate && next build) — защита от
+        # дрейфа: ЛЮБОЙ job/машина, запускающая `bun run build`,
+        # получает свежий клиент. Docker-образ вне риска: в Dockerfile
+        # generate был явным всегда.
+        run: bunx prisma generate
+
+      - name: Чистая база + миграции + сид демо-данных
+        # v1.0.29-фикс: раньше был `prisma db push` — он применяет СХЕМУ,
+        # но НЕ выполняет SQL миграций, включая сид базовых форматов
+        # (INSERT F11/F8/F6/FUTSAL в 00000000000002). FormatLink оставался
+        # пуст, дубль code=F11 не отклонялся (422→200) — тест «мусорные
+        # коды и дубли» падал только в CI. Теперь тот же путь, что и прод
+        # в deploy.sh: migrate deploy + seed — заодно CI проверяет сами
+        # миграции (сломанный SQL ловится здесь, а не на сервере).
+        run: |
+          bunx prisma migrate deploy
+          bun prisma/seed.ts
+
+      - name: Прод-сборка (standalone)
+        run: bun run build
+
+      - name: Запуск сервера (порт 3100)
+        run: |
+          PORT=3100 NODE_ENV=production \
+            DATABASE_URL=postgresql://scoresbox:scoresbox@localhost:5432/scoresbox?schema=public \
+            AUTH_SECRET=ci-secret-not-for-production SITE_URL=http://localhost:3100 \
+            nohup bun .next/standalone/server.js > server.log 2>&1 &
+          # ждём health-check (до 60 с)
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3100/api/health > /dev/null; then echo "server is up"; break; fi
+            sleep 2
+          done
+          curl -sf http://localhost:3100/api/health | grep '"ok":true'
+
+      - name: Интеграционные тесты (мутируют данные — база одноразовая)
+        run: API_URL=http://localhost:3100 bun test tests/integration
+
+      - name: SMTP-приглашения (мок-SMTP + второй сервер с SMTP_HOST)
+        # v1.0.33 · золотой стандарт доставки: скрипт поднимает мок-SMTP
+        # (:2525) и отдельный сервер (:3120) с SMTP-переменными — проверяет,
+        # что ссылки уходят письмами (из API исключены), клик по письму
+        # подтверждает ящик, а при мёртвом SMTP создание откатывается.
+        run: |
+          DATABASE_URL=postgresql://scoresbox:scoresbox@localhost:5432/scoresbox?schema=public \
+          AUTH_SECRET=ci-secret-not-for-production \
+          bun scripts/test-invites.ts
+
+      - name: Отчёт о сервере при падении
+        if: failure()
+        run: |
+          echo "---- server.log (последние 100 строк) ----"
+          tail -100 server.log || true
+
+  # ---------- 3. Прод-образ Docker ----------
+  docker:
+    name: Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: [quality, integration]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Сборка образа (без push — публикация в CD)
+        run: docker build -t scoresbox:${{ github.sha }} .
+
+  # ---------- 4. Аудит зависимостей ----------
+  audit:
+    name: Dependency audit
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - name: bun audit (критичные уязвимости ломают пайплайн)
+        # SECURITY: без || echo — любой critical-дефект обязан останавливать CI.
+        # ВАЖНО: флаг называется --audit-level (bun), а НЕ --level:
+        # --level молча игнорируется, и команда падает от ЛЮБОЙ уязвимости.
+        # До Этапа 1 это маскировалось наличием critical (Next RCE + next-auth).
+        run: bun audit --audit-level=critical
