@@ -1,0 +1,283 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  /* SCORESBOX: семантические токены двойной темы (тёмный сайт / светлая админка) */
+  --color-s0: var(--s0);
+  --color-s1: var(--s1);
+  --color-s2: var(--s2);
+  --color-sline: var(--sline);
+  --color-ink: var(--ink);
+  --color-ink2: var(--ink2);
+  --color-ink3: var(--ink3);
+  --color-gold: var(--gold);
+  --color-goldink: var(--goldink);
+  --color-live: var(--live);
+  --color-ok: var(--ok);
+  --color-warn: var(--warn);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+:root {
+  --radius: 0.625rem;
+  /* SCORESBOX · светлая тема (админка) */
+  --s0: #f4f5f7;
+  --s1: #ffffff;
+  --s2: #eff1f4;
+  --sline: #e4e6eb;
+  --ink: #1b1f27;
+  --ink2: #6b7280;
+  --ink3: #9ca3af;
+  --gold: #b45309;
+  --goldink: #ffffff;
+  --live: #dc2626;
+  --ok: #059669;
+  --warn: #d97700;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+.dark {
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  /* UX-инвариант: любой кликабельный элемент показывает «палец» и даёт
+     видимый отклик при наведении/фокусе — пользователь сразу видит,
+     что можно нажать (аудит юзабилити: кнопки-строки, ссылки, табы). */
+  button:not(:disabled),
+  a,
+  [role="button"],
+  summary,
+  label:has(input[type="checkbox"], input[type="radio"]),
+  tr[data-clickable],
+  [data-clickable] {
+    cursor: pointer;
+  }
+  button:disabled {
+    cursor: not-allowed;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  [role="button"]:focus-visible,
+  [data-clickable]:focus-visible,
+  summary:focus-visible {
+    outline: 2px solid var(--gold);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+}
+
+/* ============================================================
+   SCORESBOX · «Ночь под прожекторами» — тёмная тема публичного сайта
+   ============================================================ */
+.theme-dark {
+  --s0: #0a0d13;
+  --s1: #11151d;
+  --s2: #1b2330;
+  --sline: #232c3a;
+  --ink: #f2f5fa;
+  --ink2: #98a2b3;
+  --ink3: #616d7e;
+  --gold: #ffd400;
+  --goldink: #141007;
+  --live: #ff5157;
+  --ok: #34d399;
+  --warn: #fbbf24;
+  background: var(--s0);
+  color: var(--ink);
+  color-scheme: dark;
+}
+
+/* Радиальная подсветка «прожектора» для геро-блоков */
+.stadium-glow {
+  background:
+    radial-gradient(60% 90% at 50% -10%, rgba(255, 212, 0, 0.1), transparent 60%),
+    linear-gradient(180deg, var(--s2), var(--s1));
+}
+
+/* Тонкий скроллбар для тёмной и светлой темы */
+.scrollbar-s21 {
+  scrollbar-width: thin;
+  scrollbar-color: var(--ink3) transparent;
+}
+.scrollbar-s21::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-s21::-webkit-scrollbar-thumb {
+  background: var(--ink3);
+  border-radius: 999px;
+}
+.scrollbar-s21::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Скрытие скроллбара у горизонтальных табов */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Пульс LIVE-индикатора */
+@keyframes s21-live {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.35;
+    transform: scale(0.8);
+  }
+}
+.live-dot {
+  animation: s21-live 1.2s ease-in-out infinite;
+}
+
+/* Строчная подача счёта */
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- Сигналы «эмоций» турнира (стрики, важные матчи) ---------- */
+
+/* Команда «на огне»: победная серия. Мягкое тёплое свечение строки/имени */
+.streak-hot {
+  color: #fbbf24;
+}
+.streak-hot-glow {
+  filter: drop-shadow(0 0 5px rgba(251, 191, 36, 0.65));
+  animation: s21-flicker 1.6s ease-in-out infinite;
+}
+@keyframes s21-flicker {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+/* Команда в кризисе: серия поражений — холодный синий */
+.streak-cold {
+  color: #7dd3fc;
+}
+
+/* «Важный матч» — борьба за призовые места / 1-е место */
+.match-important {
+  background: linear-gradient(90deg, rgba(255, 212, 0, 0.08), transparent 55%);
+}
+.badge-important {
+  background: rgba(255, 212, 0, 0.14);
+  color: var(--gold);
+}
+
+/* Подсветка «своих» команд в таблице на странице матча */
+.row-hl {
+  background: rgba(255, 212, 0, 0.07);
+  box-shadow: inset 3px 0 0 var(--gold);
+}
+
