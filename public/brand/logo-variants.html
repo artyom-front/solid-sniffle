@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCORESBOX · логотип: знак-поле + scoresbox</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --s0: #0a0d13; --s1: #141922; --s2: #1a1f2e; --sline: #2a3040;
+    --ink: #eeeeee; --ink2: #8899aa; --ink3: #5e6c7d;
+    --gold: #ffd700; --goldink: #17130a;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--s0); color: var(--ink);
+    font-family: "Onest", -apple-system, "SF Pro Text", "Segoe UI", Arial, sans-serif;
+    min-height: 100vh; padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-weight: 300; font-size: 28px; letter-spacing: -0.01em; line-height: 1.1; white-space: nowrap; }
+  h1 b { font-weight: 900; color: var(--gold); }
+  .sub { margin-top: 8px; color: var(--ink3); font-size: 14px; line-height: 1.55; max-width: 680px; }
+  .grid { margin-top: 28px; display: grid; gap: 12px; }
+  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--s1); border: 1px solid var(--sline); border-radius: 8px;
+    padding: 24px 20px 18px; display: flex; flex-direction: column; gap: 18px;
+  }
+  .card.applied { border-color: rgba(255,215,0,.5); }
+  .badge {
+    align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--gold); background: rgba(255,215,0,.12);
+    border-radius: 6px; padding: 3px 9px;
+  }
+  .lockup { display: flex; align-items: center; gap: 10px; line-height: 1; }
+  .lockup .wm { font-size: 19px; font-weight: 300; letter-spacing: -0.02em; color: var(--ink); white-space: nowrap; }
+  /* вложенный знак-поле вместо «o» в «box» (v1.0.40) */
+  .wm b { font-weight: 900; color: var(--gold); letter-spacing: -0.01em; }
+  .wm svg.og {
+    width: .62em; height: .62em; vertical-align: baseline;
+    margin: 0 .07em; display: inline-block;
+  }
+  .lockup .wm b { font-weight: 900; letter-spacing: -0.01em; color: var(--gold); }
+  .tagline { border-left: 1px solid var(--sline); padding-left: 12px; font-size: 12px; color: var(--ink3); }
+  .name { font-weight: 600; font-size: 15px; }
+  .why { color: var(--ink3); font-size: 13px; line-height: 1.55; margin-top: auto; }
+  .scale { display: flex; align-items: center; gap: 16px; color: var(--ink3); font-size: 11px; }
+  .scale span { display: flex; align-items: center; gap: 6px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--ink2); }
+  .fav { border-radius: 25%; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>scores<b>box</b> · логотип в одну строку</h1>
+  <p class="sub">Директива Р-01: логотип = <b>жёлтый знак-поле 32px</b> (скругление 8px) +
+  текст <b>scoresb□x</b> в одну строку: знак-поле ВЛОЖЕН в слово и заменяет
+  букву «o» в «box» (референс владельца, 2026-10-01, адаптация под палитру
+  scoresbox). Пропорции по референсу: знак на базовой линии, высота между
+  x-height и ascender, зазоры как межбуквенные. Разметка упрощена и утолщена
+  (центральная линия, круг, штрафные) — поле читается в 10–17px. Знак живёт и
+  отдельно (favicon, apple-icon). Шрифт — Onest: «scores» Light 300, «b…x» Black 900.
+  Слоган «Футбол Чувашии онлайн» — 12px серым, только на широких экранах. Открыть:
+  <code>/brand/logo-variants.html</code>.</p>
+
+  <div class="grid">
+    <!-- ВАРИАНТ A: применён (v1.0.40) — знак ВЛОЖЕН вместо «o» в «box» -->
+    <div class="card applied">
+      <span class="badge">Применён на сайте · v1.0.40</span>
+      <div class="lockup">
+        <span class="wm">scores<b>b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="13" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="7" x2="32" y2="57" stroke-width="6.5"/><circle cx="32" cy="32" r="10.5" stroke-width="6.5"/><rect x="4" y="17" width="12" height="30" rx="2" stroke-width="6"/><rect x="48" y="17" width="12" height="30" rx="2" stroke-width="6"/></g><circle cx="32" cy="32" r="3" fill="#17130A"/></svg>x</b></span>
+        <span class="tagline">Футбол Чувашии онлайн</span>
+      </div>
+      <div class="scale">
+        <span style="font-size:14px" class="wm">scores<b>b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="13" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="7" x2="32" y2="57" stroke-width="6.5"/><circle cx="32" cy="32" r="10.5" stroke-width="6.5"/><rect x="4" y="17" width="12" height="30" rx="2" stroke-width="6"/><rect x="48" y="17" width="12" height="30" rx="2" stroke-width="6"/></g><circle cx="32" cy="32" r="3" fill="#17130A"/></svg>x</b></span>14px
+        <span style="font-size:19px" class="wm">scores<b>b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="13" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="7" x2="32" y2="57" stroke-width="6.5"/><circle cx="32" cy="32" r="10.5" stroke-width="6.5"/><rect x="4" y="17" width="12" height="30" rx="2" stroke-width="6"/><rect x="48" y="17" width="12" height="30" rx="2" stroke-width="6"/></g><circle cx="32" cy="32" r="3" fill="#17130A"/></svg>x</b></span>19px
+        <span style="font-size:24px" class="wm">scores<b>b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="13" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="7" x2="32" y2="57" stroke-width="6.5"/><circle cx="32" cy="32" r="10.5" stroke-width="6.5"/><rect x="4" y="17" width="12" height="30" rx="2" stroke-width="6"/><rect x="48" y="17" width="12" height="30" rx="2" stroke-width="6"/></g><circle cx="32" cy="32" r="3" fill="#17130A"/></svg>x</b></span>24px
+      </div>
+      <p class="name">A · Знак-поле вложен вместо «o» в «box»</p>
+      <p class="why">Концепция референса владельца: марка встроена прямо в слово, знак =
+      фирменное футбольное поле (не крест из референса). Высота знака 0.62em,
+      базовая линия, зазоры 0.07em — как буква. Знак масштабируется вместе с
+      кеглем: и в шапке, и в подвале.</p>
+    </div>
+
+    <!-- ВАРИАНТ B: поле без вратарских зон -->
+    <div class="card">
+      <div class="lockup">
+        <svg width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="6" x2="32" y2="58" stroke-width="4"/><circle cx="32" cy="32" r="8.5" stroke-width="4"/><rect x="5" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/><rect x="48" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/></g><circle cx="32" cy="32" r="2" fill="#17130A"/></svg>
+        <span class="wm">scores<b>box</b></span>
+      </div>
+      <div class="scale">
+        <span><svg width="16" height="16" viewBox="0 0 64 64" class="fav"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="6" x2="32" y2="58" stroke-width="5"/><circle cx="32" cy="32" r="8.5" stroke-width="5"/><rect x="5" y="18" width="11" height="28" rx="1.5" stroke-width="4.5"/><rect x="48" y="18" width="11" height="28" rx="1.5" stroke-width="4.5"/></g></svg>16</span>
+        <span><svg width="32" height="32" viewBox="0 0 64 64" class="fav"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="6" x2="32" y2="58" stroke-width="4"/><circle cx="32" cy="32" r="8.5" stroke-width="4"/><rect x="5" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/><rect x="48" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/></g><circle cx="32" cy="32" r="2" fill="#17130A"/></svg>32</span>
+      </div>
+      <p class="name">B · Поле с штрафными, без вратарских</p>
+      <p class="why">Чище на мелких размерах: три уровня линий вместо пяти. Минус —
+      «стадионность» слабее: без 6-ярдовых зон и углов поле больше похоже
+      на схему, чем на арену.</p>
+    </div>
+
+    <!-- ВАРИАНТ C: минимализм — линия + круг -->
+    <div class="card">
+      <div class="lockup">
+        <svg width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="7" x2="32" y2="57" stroke-width="5"/><circle cx="32" cy="32" r="11" stroke-width="5"/></g></svg>
+        <span class="wm">scores<b>box</b></span>
+      </div>
+      <div class="scale">
+        <span><svg width="16" height="16" viewBox="0 0 64 64" class="fav"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none"><line x1="32" y1="7" x2="32" y2="57" stroke-width="6"/><circle cx="32" cy="32" r="11" stroke-width="6"/></g></svg>16</span>
+        <span><svg width="32" height="32" viewBox="0 0 64 64" class="fav"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none"><line x1="32" y1="7" x2="32" y2="57" stroke-width="5"/><circle cx="32" cy="32" r="11" stroke-width="5"/></g></svg>32</span>
+      </div>
+      <p class="name">C · Минимализм: линия + круг</p>
+      <p class="why">Максимально держит мелкий кегль, «шума» нет вообще. Но ворота
+      исчезают — поле угадывается только по половинам и кругу; для бренда
+      про футбол этого мало.</p>
+    </div>
+
+    <!-- ВАРИАНТ D: поле + мяч в центре -->
+    <div class="card">
+      <div class="lockup">
+        <svg width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none" stroke-linecap="round"><line x1="32" y1="6" x2="32" y2="58" stroke-width="4"/><circle cx="32" cy="32" r="8.5" stroke-width="4"/><rect x="5" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/><rect x="48" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/></g><circle cx="32" cy="32" r="4.5" fill="#17130A"/></svg>
+        <span class="wm">scores<b>box</b></span>
+      </div>
+      <div class="scale">
+        <span><svg width="16" height="16" viewBox="0 0 64 64" class="fav"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none"><line x1="32" y1="6" x2="32" y2="58" stroke-width="5"/><circle cx="32" cy="32" r="8.5" stroke-width="5"/><rect x="5" y="18" width="11" height="28" rx="1.5" stroke-width="4.5"/><rect x="48" y="18" width="11" height="28" rx="1.5" stroke-width="4.5"/></g><circle cx="32" cy="32" r="5" fill="#17130A"/></svg>16</span>
+        <span><svg width="32" height="32" viewBox="0 0 64 64" class="fav"><rect width="64" height="64" rx="16" fill="#FFD700"/><g stroke="#17130A" fill="none"><line x1="32" y1="6" x2="32" y2="58" stroke-width="4"/><circle cx="32" cy="32" r="8.5" stroke-width="4"/><rect x="5" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/><rect x="48" y="18" width="11" height="28" rx="1.5" stroke-width="3.5"/></g><circle cx="32" cy="32" r="4.5" fill="#17130A"/></svg>32</span>
+      </div>
+      <p class="name">D · Поле + мяч в центре</p>
+      <p class="why">Центральная точка разыграна как мяч — «матч начинается».
+      Дружелюбнее и динамичнее, но в 16px точка почти неотличима
+      от варианта B.</p>
+    </div>
+  </div>
+
+  <p class="sub" style="margin-top:28px">Финал (v1.0.40) — вариант <b>A</b>: знак-поле ВЛОЖЕН в вордрмарк
+  вместо буквы «o» («scoresb□x»). Логотип не переносится ни на одной ширине
+  (360–1920px), слоган появляется только от 1024px. Отдельный квадрат-поле
+  остаётся favicon и apple-icon. Если хочется другой вариант знака — скажите,
+  смена одной SVG-фигуры занимает минуты.</p>
+</div>
+</body>
+</html>

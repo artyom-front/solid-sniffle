@@ -1,0 +1,77 @@
+import type { Metadata, Viewport } from "next";
+// ШРИФТЫ (v1.0.37): Geist был загружен ТОЛЬКО с subsets:["latin"] — вся
+// кириллица сайта рендерилась системным фолбэком (отсюда «зажирные»
+// фамилии и разнобой начертаний). Onest — гротеск с полной кириллицей
+// (100–900, включая Light 300 и Black 900 для вордрмарка scores·box);
+// Geist_Mono остаётся для цифр счёта/минут (латинский набор покрывает).
+import { Onest, Geist_Mono } from "next/font/google";
+import "./globals.css";
+import { Toaster } from "@/components/ui/toaster";
+
+const onest = Onest({
+  variable: "--font-onest",
+  subsets: ["latin", "cyrillic"],
+});
+
+const geistMono = Geist_Mono({
+  variable: "--font-geist-mono",
+  subsets: ["latin"],
+});
+
+const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
+
+export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: "SCORESBOX — футбол Чувашии онлайн: турниры, статистика, результаты",
+    template: "%s · SCORESBOX",
+  },
+  description:
+    "SCORESBOX — спортивно-аналитический портал футбола Чувашии: livescore матчей 11×11, 8×8, 6×6 и мини-футбола, турнирные таблицы, статистика игроков и судей, дисквалификации, календарь турниров.",
+  keywords: ["футбол", "Чувашия", "результаты матчей", "livescore", "турнирная таблица", "мини-футбол", "статистика", "дисквалификации", "scoresbox"],
+  applicationName: "SCORESBOX",
+  alternates: { canonical: "/" },
+  openGraph: {
+    title: "SCORESBOX — футбол Чувашии онлайн",
+    description: "Все турниры Чувашии в реальном времени: матчи, таблицы, бомбардиры, судьи",
+    siteName: "SCORESBOX",
+    locale: "ru_RU",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "SCORESBOX — футбол Чувашии онлайн",
+    description: "Все турниры Чувашии в реальном времени: матчи, таблицы, бомбардиры, судьи",
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
+  },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0A0D13",
+  width: "device-width",
+  initialScale: 1,
+};
+
+export default function RootLayout({
+  children,
+}: Readonly<{
+  children: React.ReactNode;
+}>) {
+  return (
+    // ПЕРЕМЕННЫЕ ШРИФТОВ — НА <html>, НЕ НА <body> (грабля v1.0.37):
+    // Tailwind v4 preflight задаёт font-family на html через
+    // --default-font-family → var(--font-onest); если переменная
+    // определена на body, html её не видит и ВЕСЬ сайт годами
+    // рендерился системным фолбэком (Geist не работал тоже).
+    <html lang="ru" suppressHydrationWarning className={`${onest.variable} ${geistMono.variable}`}>
+      <body className="antialiased bg-background text-foreground">
+        {children}
+        <Toaster />
+      </body>
+    </html>
+  );
+}
