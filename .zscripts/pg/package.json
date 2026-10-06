@@ -1,0 +1,9 @@
+{
+  "name": "sandbox-pg",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Embedded PostgreSQL для песочницы z.ai (не часть проекта, gitignored)",
+  "dependencies": {
+    "embedded-postgres": "16.14.0-beta.17"
+  }
+}
