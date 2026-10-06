@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- SCORESBOX favicon v1.0.46: знак-поле — золотой квадрат с сильно
+       скруглёнными углами (rx 20/64); разметка стадиона ВЫРЕЗАНА
+       (просветы прозрачны — цвет любого фона просвечивает):
+       центральная вертикальная линия, круг-кольцо, штрафные площадки
+       у обеих кромок. Толщина линий = жирность букв «b»/«x» вордрмарка,
+       знак читается от 16px. Зеркалит LogoGlyph (Logo.tsx). -->
+  <mask id="sbx-pitch" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+    <rect width="64" height="64" fill="#fff"/>
+    <g fill="#000">
+      <rect x="28.25" y="-2" width="7.5" height="68"/>
+      <circle cx="32" cy="32" r="14"/>
+      <circle cx="32" cy="32" r="6.5" fill="#fff"/>
+      <rect x="13" y="13.5" width="7" height="37"/>
+      <rect x="-2" y="13.5" width="22" height="7"/>
+      <rect x="-2" y="43.5" width="22" height="7"/>
+      <rect x="44" y="13.5" width="7" height="37"/>
+      <rect x="44" y="13.5" width="22" height="7"/>
+      <rect x="44" y="43.5" width="22" height="7"/>
+    </g>
+  </mask>
+  <rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pitch)"/>
+</svg>

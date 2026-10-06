@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCORESBOX · система логотипа v1.0.46</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --s0: #0a0d13; --s1: #141922; --s2: #1a1f2e; --sline: #2a3040;
+    --ink: #eeeeee; --ink2: #8899aa; --ink3: #5e6c7d;
+    --gold: #ffd700; --goldink: #17130a;
+    --gold-light: #b45309; /* золотой на светлом фоне (канон админ-темы) */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--s0); color: var(--ink);
+    font-family: "Onest", -apple-system, "SF Pro Text", "Segoe UI", Arial, sans-serif;
+    min-height: 100vh; padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 860px; margin: 0 auto; }
+  h1 { font-weight: 300; font-size: 28px; letter-spacing: -0.01em; line-height: 1.1; }
+  h1 b { font-weight: 900; color: var(--gold); }
+  .sub { margin-top: 8px; color: var(--ink3); font-size: 14px; line-height: 1.55; max-width: 700px; }
+  .grid { margin-top: 28px; display: grid; gap: 12px; }
+  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--s1); border: 1px solid var(--sline); border-radius: 8px;
+    padding: 24px 20px 18px; display: flex; flex-direction: column; gap: 18px;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .badge {
+    align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--gold); background: rgba(255,215,0,.12);
+    border-radius: 6px; padding: 3px 9px;
+  }
+  .stage { display: flex; align-items: center; justify-content: center; min-height: 170px; border-radius: 8px; }
+  .stage.dark { background: var(--s0); }
+  .stage.panel { background: var(--s2); }
+  .stage.light { background: #ffffff; }
+  .name { font-weight: 600; font-size: 15px; }
+  .why { color: var(--ink3); font-size: 13px; line-height: 1.55; margin-top: auto; }
+  .scale { display: flex; align-items: center; gap: 18px; color: var(--ink3); font-size: 11px; }
+  .scale span { display: flex; align-items: center; gap: 6px; }
+
+  /* ---------- вертикальный лого: «scores» Medium над «box» Black (~2×) */
+  .lv { display: flex; flex-direction: column; align-items: center; gap: .04em; line-height: 1; }
+  .lv .scores { font-weight: 500; letter-spacing: .03em; color: var(--ink); font-size: calc(var(--s) * .20); }
+  .lv .box { font-weight: 900; letter-spacing: -.02em; color: var(--gold); font-size: calc(var(--s) * .42); line-height: 1.05; white-space: nowrap; }
+  .lv.on-light .scores { color: #1b1f27; }
+  .lv.on-light .box { color: var(--gold-light); }
+  .lv.mono .scores, .lv.mono .box { color: currentColor; }
+
+  /* ---------- горизонтальный (шапка): scores Light + b[знак]x Black */
+  .wm { font-size: 19px; line-height: 1; white-space: nowrap; }
+  .wm .s { font-weight: 300; letter-spacing: -.02em; color: var(--ink); }
+  .wm .b { font-weight: 900; letter-spacing: -.01em; color: var(--gold); }
+  .lockup { display: flex; align-items: center; gap: 10px; }
+  .tagline { border-left: 1px solid var(--sline); padding-left: 12px; font-size: 12px; color: var(--ink3); }
+
+  /* ---------- знак-поле (вложенный в «box» и отдельный) */
+  .og { width: .62em; height: .62em; margin: 0 .07em; display: inline-block; vertical-align: baseline; }
+  .glyph { display: inline-block; }
+  .fav { border-radius: 25%; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--ink2); }
+</style>
+</head>
+<body>
+<!-- ОДНА маска разметки на весь документ: чёрное = вырез, белый центр
+     круга восстанавливается. Все знаки ниже ссылаются на url(#sbx-pm). -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <mask id="sbx-pm" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <g fill="#000">
+        <rect x="28.25" y="-2" width="7.5" height="68"/>
+        <circle cx="32" cy="32" r="14"/>
+        <circle cx="32" cy="32" r="6.5" fill="#fff"/>
+        <rect x="13" y="13.5" width="7" height="37"/>
+        <rect x="-2" y="13.5" width="22" height="7"/>
+        <rect x="-2" y="43.5" width="22" height="7"/>
+        <rect x="44" y="13.5" width="7" height="37"/>
+        <rect x="44" y="13.5" width="22" height="7"/>
+        <rect x="44" y="43.5" width="22" height="7"/>
+      </g>
+    </mask>
+  </defs>
+</svg>
+
+<div class="wrap">
+  <h1>scores b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg>x</h1>
+  <p class="sub">
+    Система логотипа v1.0.46 (бриф 2026-10-06): <b>основная — вертикальная</b> композиция
+    «scores» / «box»; знак-поле — золотой квадрат с <b>сильно скруглёнными углами</b> (rx 20/64)
+    и разметкой стадиона <b>вырезами</b> (линии прозрачны — цвет фона просвечивает):
+    центральная вертикальная линия, круг, штрафные площадки у кромок. Толщина линий (7.5/64)
+    равна насыщенности букв «b»/«x» — знак читается как буква «o». Золото — канон сайта
+    #FFD700 (бриф-референс #EBC15D адаптирован под палитру). Реализация: <code>src/components/portal/Logo.tsx</code>,
+    зерно ассетов — <code>scripts/make-brand-assets.py</code>.
+  </p>
+
+  <div class="grid">
+    <!-- 1. Основная вертикальная -->
+    <div class="card wide">
+      <span class="badge">Основная · вертикальная</span>
+      <div class="stage panel" style="--s: 220px">
+        <span class="lv" role="img" aria-label="SCORESBOX">
+          <span class="scores">scores</span>
+          <span class="box">b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg>x</span>
+        </span>
+      </div>
+      <p class="name">scores box — вертикальный лок-ап</p>
+      <p class="why">
+        «scores» — Onest Medium, по центру; «box» — Onest Black, ~2× крупнее, плотный
+        трекинг; знак-поле вместо «o». Силуэт близок к квадрату. Использование: страницы
+        входа/установки пароля, печатные и добрендовые носители. Компонент: <code>LogoVertical</code>.
+      </p>
+    </div>
+
+    <!-- 2. Горизонтальная (шапка) -->
+    <div class="card">
+      <span class="badge">Горизонтальная · шапка сайта</span>
+      <div class="stage panel">
+        <span class="lockup">
+          <span class="wm"><span class="s">scores</span><span class="b">b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg>x</span></span>
+          <span class="tagline">Футбол Чувашии онлайн</span>
+        </span>
+      </div>
+      <p class="name">scoresb…x — одна строка</p>
+      <p class="why">
+        «scores» Light + «b…x» Black золотом, слоган 12px справа только ≥1024px.
+        Живёт в шапке и подвале сайта. Компонент: <code>LogoWordmark</code> / <code>Logo</code>.
+      </p>
+    </div>
+
+    <!-- 3. Знак / Favicon -->
+    <div class="card">
+      <span class="badge">Знак · Favicon</span>
+      <div class="stage panel">
+        <span class="scale">
+          <span>16 <svg class="glyph" width="16" height="16" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg></span>
+          <span>32 <svg class="glyph" width="32" height="32" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg></span>
+          <span>64 <svg class="glyph" width="64" height="64" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg></span>
+          <span>favicon <svg class="glyph fav" width="40" height="40" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#FFD700" mask="url(#sbx-pm)"/></svg></span>
+        </span>
+      </div>
+      <p class="name">Знак-поле отдельно</p>
+      <p class="why">
+        <code>src/app/icon.svg</code> (фавикон), <code>apple-icon.png</code> 240×240,
+        знак страницы 2FA. Вырезы прозрачны — знак работает на любом фоне без
+        «плашек». Компонент: <code>LogoGlyph</code>.
+      </p>
+    </div>
+
+    <!-- 4. Светлый фон -->
+    <div class="card">
+      <span class="badge">Светлый фон</span>
+      <div class="stage light">
+        <span class="lv on-light" style="--s: 130px" role="img" aria-label="SCORESBOX">
+          <span class="scores">scores</span>
+          <span class="box">b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="#b45309" mask="url(#sbx-pm)"/></svg>x</span>
+        </span>
+      </div>
+      <p class="name">Версия для белого</p>
+      <p class="why">
+        «scores» — #1b1f27, «box» и знак — приглушённое золото #b45309 (канон
+        светлой темы админки): чистое #FFD700 на белом не читается.
+      </p>
+    </div>
+
+    <!-- 5. Монохром -->
+    <div class="card">
+      <span class="badge">Монохром</span>
+      <div class="stage dark">
+        <span class="lv mono" style="--s: 110px; color:#fff" role="img" aria-label="SCORESBOX">
+          <span class="scores">scores</span>
+          <span class="box">b<svg class="og" viewBox="0 0 64 64"><rect width="64" height="64" rx="20" fill="currentColor" mask="url(#sbx-pm)"/></svg>x</span>
+        </span>
+      </div>
+      <p class="name">Ч/б печать, факсы, штампы</p>
+      <p class="why">
+        Вся композиция — <code>currentColor</code>: одна краска на любом носителе.
+        Чёрная версия — цвет контейнера #000. Компонент: <code>LogoVertical mono</code>.
+      </p>
+    </div>
+
+    <!-- 6. OG-карточка -->
+    <div class="card wide">
+      <span class="badge">OG-карточка соцсетей</span>
+      <div class="stage dark" style="padding: 0">
+        <img src="/og-image.png" alt="SCORESBOX — og-image 1200×630" style="width: 100%; max-width: 560px; display: block; border-radius: 8px">
+      </div>
+      <p class="name">og-image.png · 1200×630</p>
+      <p class="why">
+        Ссылки в Telegram/VK/Twitter разворачиваются в карточку: тёмный графит,
+        вертикальный лого, домен и слоган. Референс в метаданных:
+        <code>openGraph.images / twitter.images</code> (layout.tsx).
+      </p>
+    </div>
+  </div>
+</div>
+</body>
+</html>
