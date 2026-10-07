@@ -1,0 +1,39 @@
+# SCORESBOX — дев-стек: PostgreSQL + приложение.
+# Запуск: docker compose up -d --build
+# Локальная разработка (bun run dev): поднимите только базу —
+#   docker compose up -d db
+# БД доступна с хоста на 127.0.0.1:5432 (см. .env.example).
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: scoresbox-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scoresbox
+      POSTGRES_PASSWORD: scoresbox
+      POSTGRES_DB: scoresbox
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - scoresbox-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scoresbox -d scoresbox"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  app:
+    build: .
+    container_name: scoresbox-app
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      - DATABASE_URL=postgresql://scoresbox:scoresbox@db:5432/scoresbox?schema=public
+    ports:
+      - "127.0.0.1:3000:3000"
+
+volumes:
+  scoresbox-pgdata:
