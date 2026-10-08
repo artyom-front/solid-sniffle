@@ -3,14 +3,15 @@
 // v1.0.34: поиск — регистронезависимый (фамилия/имя/отчество), список —
 // постраничный (page/pageSize, в ответе total) — раньше 200 записей молча
 // обрезались и «Мамонтов» был за пределами выборки.
-// Защита от дублей: при совпадении ФИО+даты рождения — 409 со списком кандидатов
-// (создание возможно только с force: true; объединить позже — «Merge профилей»).
+// Защита от дублей (v1.0.52): 409 — ТОЛЬКО при точном совпадении ФИО+ДР
+// (создание возможно с force: true; объединить позже — «Merge профилей»).
+// Тёзки (одинаковые Ф+И без ДР) создаются свободно, ответ несёт advisory.
 
 import { db } from "@/lib/db";
 import { requireRole, HttpError } from "@/lib/auth";
 import { errorResponse } from "@/lib/http";
 import { audit } from "@/lib/engine/lifecycle";
-import { normalizeRoles, refereeFromRoles } from "@/lib/roles";
+import { normalizeRoles, refereeFromRoles, MATCH_OFFICIAL_ROLE_CODES } from "@/lib/roles";
 import { caseVariants } from "@/lib/text";
 
 const POSITIONS = ["GK", "DF", "MF", "FW"];
@@ -19,12 +20,56 @@ export async function GET(req: Request) {
   try {
     await requireRole("CLUB_ADMIN", "LEAGUE_ADMIN", "SUPER_ADMIN", "REFEREE");
     const { searchParams } = new URL(req.url);
-    // v1.0.34 · ПОИСК: без toLowerCase на сервере! Prisma contains на
-    // PostgreSQL РЕГИСТРОЗАВИСИМ — вместе с mode:"insensitive" ищем и
-    // «Мамонтов», и «мамонтов»; ищем и в фамилии, и в имени, и в отчестве
-    // (двуязычные опечатки, «по отчеству помню только»).
     const q = searchParams.get("q")?.trim() ?? "";
     const seasonId = searchParams.get("seasonId");
+
+    // v1.0.46 · ПОЛНЫЕ ВЫБОРКИ БЕЗ ПАГИНАЦИИ (баг «виден только Алексеев»):
+    // селекторы форм (судья в матче, персона у пользователя, игрок в заявках)
+    // раньше брали первую страницу (50 записей по алфавиту) — судьи/игроки с
+    // фамилиями дальше первых 50 НЕ ВИДИЛИСЬ в выпадающих списках.
+    //   officials=1 — весь судейский корпус + врач (для селектора матча);
+    //   all=1 — все персоны лёгким DTO (для панелей без поиска по q).
+    const officialsOnly = searchParams.get("officials") === "1";
+    const allMode = searchParams.get("all") === "1";
+
+    if (officialsOnly) {
+      const officialRoleCodes = [...MATCH_OFFICIAL_ROLE_CODES];
+      const officials = await db.person.findMany({
+        where: { OR: [{ isReferee: true }, { roles: { hasSome: officialRoleCodes } }] },
+        orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+        select: { id: true, firstName: true, lastName: true, middleName: true, isReferee: true, roles: true },
+      });
+      return Response.json({
+        total: officials.length,
+        persons: officials.map((p) => ({
+          id: p.id,
+          name: `${p.lastName} ${p.firstName} ${p.middleName ?? ""}`.trim(),
+          isReferee: p.isReferee,
+          roles: p.roles,
+        })),
+      });
+    }
+
+    if (allMode) {
+      const [persons, total] = await Promise.all([
+        db.person.findMany({
+          orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+          include: { registrations: seasonId ? { where: { seasonId }, include: { team: true } } : { include: { team: true } } },
+        }),
+        db.person.count(),
+      ]);
+      return Response.json({
+        total,
+        persons: persons.map((p) => ({
+          id: p.id,
+          name: `${p.lastName} ${p.firstName} ${p.middleName ?? ""}`.trim(),
+          isReferee: p.isReferee,
+          roles: p.roles,
+          teams: [...new Set(p.registrations.map((r) => r.team.name))],
+        })),
+      });
+    }
+
     // v1.0.34 · ПАГИНАЦИЯ: страница от 1, размер 20–200 (дефолт 50).
     // Раньше список молча обрезался на 200 записей — «выдаётся только до
     // буквы К, а Мамонтова не видно»; теперь в ответе total и постранично.
@@ -147,12 +192,35 @@ export async function POST(req: Request) {
     // живёт на уровне сезона (lib/engine/conflicts.ts); узкие должности
     // корпуса normalizeRoles уже перевёл в единый REFEREE
 
-    // ---- защита от дублей: ФИО + дата рождения ----
-    const dup = await findDuplicate(String(lastName).trim(), String(firstName).trim(), String(middleName ?? "").trim(), birthDate ? new Date(birthDate) : null);
-    if (dup.length > 0 && !force) {
+    // ---- защита от дублей: ТОЧНОЕ совпадение ФИО + даты рождения ----
+    // v1.0.52 (фидбек «нельзя создать игрока с одинаковыми Фамилией и
+    // Именем»): 409-блок ставится ТОЛЬКО на полное совпадение личности —
+    // фамилия + имя + отчество И дата рождения (оба поля заполнены и
+    // совпали). Совпадение только Ф+И — обычные тёзки-однофамильцы:
+    // создание проходит СВОБОДНО, ответ несёт advisory-список похожих
+    // (UI мягко предупреждает и напоминает про «Merge профилей»).
+    const newMiddle = String(middleName ?? "").trim();
+    const newBirth = birthDate ? new Date(birthDate) : null;
+    const similar = await findSimilar(String(lastName).trim(), String(firstName).trim());
+    const strong = newBirth
+      ? similar.filter((p) => {
+          const sameBirth = p.birthDate != null && p.birthDate.getTime() === newBirth.getTime();
+          const sameMiddle = (p.middleName ?? "").trim().toLowerCase() === newMiddle.toLowerCase();
+          return sameBirth && sameMiddle;
+        })
+      : [];
+    const toDTO = (list: typeof similar) =>
+      list.map((p) => ({
+        id: p.id,
+        name: p.name,
+        birthDate: p.birthDate?.toISOString().slice(0, 10) ?? null,
+        roles: p.roles,
+        teams: p.teams,
+      }));
+    if (strong.length > 0 && !force) {
       return Response.json({
-        error: `Найдена похожая персона: ${dup[0].name}. Проверьте — возможно, это тот же человек (дубль)`,
-        duplicates: dup,
+        error: `Найден профиль с точно такими же ФИО и датой рождения: ${strong[0].name}. Проверьте — возможно, это дубль`,
+        duplicates: toDTO(strong),
       }, { status: 409 });
     }
 
@@ -170,25 +238,24 @@ export async function POST(req: Request) {
       },
     });
     await audit(user, "Person", person.id, "CREATE", null, { firstName, lastName, roles: roleList, gender, hasPhoto: !!photoUrl });
-    return Response.json({ ok: true, person });
+    // advisory: похожие по Ф+И (без полного совпадения) — создание прошло,
+    // но UI предупредит и напомнит про Merge (не блокирует никого)
+    const advisory = similar.filter((p) => !strong.some((s) => s.id === p.id));
+    return Response.json({ ok: true, person, ...(advisory.length > 0 ? { duplicates: toDTO(advisory) } : {}) });
   } catch (e) {
     return errorResponse(e);
   }
 }
 
-/** Поиск вероятного дубля: ФИО без учёта регистра (+ дата рождения, если указана) */
-async function findDuplicate(lastName: string, firstName: string, middleName: string, birthDate: Date | null) {
-  // дубль ищем по ВАРИАНТАМ написания (locale-C-грабля: equals insensitive
-  // не складывает кириллицу — «МАМОНТОВ» и «Мамонтов» считались разными)
+/** Поиск похожих по Ф+И (регистронезависимо, по вариантам написания —
+ *  locale-C-грабля). Дата рождения/отчество НЕ участвуют в отборе:
+ *  candidacy — только Ф+И; строгость решает вызывающий код. */
+async function findSimilar(lastName: string, firstName: string) {
   const candidates = await db.person.findMany({
     where: {
       AND: [
         { OR: caseVariants(lastName).map((v) => ({ lastName: { equals: v, mode: "insensitive" as const } })) },
         { OR: caseVariants(firstName).map((v) => ({ firstName: { equals: v, mode: "insensitive" as const } })) },
-        ...(middleName
-          ? [{ OR: caseVariants(middleName).map((v) => ({ middleName: { equals: v, mode: "insensitive" as const } })) }]
-          : []),
-        ...(birthDate ? [{ birthDate }] : []),
       ],
     },
     take: 5,
@@ -197,7 +264,8 @@ async function findDuplicate(lastName: string, firstName: string, middleName: st
   return candidates.map((p) => ({
     id: p.id,
     name: `${p.lastName} ${p.firstName} ${p.middleName ?? ""}`.trim(),
-    birthDate: p.birthDate?.toISOString().slice(0, 10) ?? null,
+    middleName: p.middleName,
+    birthDate: p.birthDate,
     roles: p.roles,
     teams: [...new Set(p.registrations.map((r) => r.team.name))],
   }));

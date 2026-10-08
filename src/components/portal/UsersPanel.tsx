@@ -127,7 +127,10 @@ function SentDialog({ open, onOpenChange, to, what }: { open: boolean; onOpenCha
 
 export function UsersPanel({ version, bump, selfId }: { version: number; bump: () => void; selfId: string }) {
   const { data, loading } = useFetch<{ mailMode: "smtp" | "manual"; users: AdminUser[] }>("/api/admin/users", version);
-  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>("/api/admin/persons", version);
+  // v1.0.46 · all=1: полный список персон (раньше первая страница — 50
+  // по алфавиту — и «привязать пользователя» было нельзя к Persone за
+  // пределами первых букв)
+  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>("/api/admin/persons?all=1", version);
   const { data: clubsData } = useFetch<{ clubs: AdminClub[] }>("/api/admin/clubs", version);
   const { data: leaguesData } = useFetch<{ leagues: AdminLeague[] }>("/api/admin/leagues", version);
   const [createOpen, setCreateOpen] = useState(false);

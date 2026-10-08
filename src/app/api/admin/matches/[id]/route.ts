@@ -149,7 +149,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         // в LineupEntry (запасной/поле); состава нет → заявка на дату матча +
         // не дисквалифицирован. Раньше входящий проверялся только на бан —
         // прямым API можно было «выпустить» произвольного Person.
-        await validateEvent(id, personId, teamId, assistPersonId ?? null);
+        // v1.0.52: передаём ТИП события — validateEvent применяет правила
+        // состояния матча (замена: вход — только запасной, выход — только
+        // с поля; прочие события — только игроки на поле).
+        await validateEvent(id, personId, teamId, assistPersonId ?? null, type);
 
         const event = await db.matchEvent.create({
           data: {
@@ -207,19 +210,29 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         // createMany (P2002) ПОСЛЕ deleteMany, т.е. состав матча терялся.
         const uniqueIds = [...new Set(personIds)];
         if (uniqueIds.length === 0) throw new HttpError(422, "Пустой состав");
-        if (match.stage) {
-          for (const personId of uniqueIds) {
-            const reg = await isRegisteredOn(personId, teamId, match.stage.seasonId, match.kickoff);
-            if (!reg) throw new HttpError(409, `Игрок не заявлен за эту команду на дату матча (Registration)`);
-            await assertNotSuspended(personId, match.stage.seasonId); // бросит 409 с деталями
-          }
-        }
 
         // роли заявки: штаб (не PLAYER) не бывает стартовым и без номера;
         // номера — только игрокам, дубли в одной команде запрещены
         const eligible = await getEligiblePlayers(id, teamId);
         const isStaff = new Set(eligible.filter((p) => p.regRole !== "PLAYER").map((p) => p.personId));
         const nameOf = new Map(eligible.map((p) => [p.personId, p.name]));
+
+        if (match.stage) {
+          for (const personId of uniqueIds) {
+            const reg = await isRegisteredOn(personId, teamId, match.stage.seasonId, match.kickoff);
+            if (!reg) {
+              // v1.0.46: заявка есть, но началась ПОЗЖЕ матча — объясняем,
+              // как чинить (раньше — сухое «не заявлен», без причины)
+              const lateReg = eligible.find((p) => p.personId === personId && !p.registrationOk);
+              if (lateReg) {
+                throw new HttpError(409, `${lateReg.name}: заявка началась ${new Date(lateReg.registrationStart ?? "").toLocaleDateString("ru-RU")} — позже матча. Нажмите «Подать состав» ещё раз и подтвердите перенос даты заявки на дату матча, либо правьте дату в карточке команды`);
+              }
+              throw new HttpError(409, `${nameOf.get(personId) ?? "Игрок"} не заявлен за эту команду на дату матча (Registration)`);
+            }
+            await assertNotSuspended(personId, match.stage.seasonId); // бросит 409 с деталями
+          }
+        }
+
         const numberMap = new Map<string, number>();
         if (Array.isArray(numbers)) {
           const seen = new Map<number, string[]>(); // номер → имена игроков

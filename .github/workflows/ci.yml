@@ -8,6 +8,9 @@
 #   docker       — сборка прод-образа (только main)
 #   audit        — bun audit (уязвимости зависимостей)
 # БД: PostgreSQL 16 (service-контейнер) — тот же движок, что и в проде.
+# Раннеры: ПИН ubuntu-24.04 (2026-10-06, Task 52) — лейбл ubuntu-latest
+#   уедет на Ubuntu 26 с 2026-10-19 (actions/runner-images#14748).
+#   Та же философия, что и пин bun 1.3.14: окружение не должно дрейфовать.
 # ============================================================
 
 name: CI
@@ -32,7 +35,7 @@ jobs:
   # ---------- 1. Качество кода ----------
   quality:
     name: Lint · Typecheck · Unit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
@@ -78,7 +81,7 @@ jobs:
   # ---------- 2. Интеграционные тесты на прод-сборке ----------
   integration:
     name: Integration · 36 инвариантов PRD + 2FA + SSR
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     needs: quality
 
@@ -183,7 +186,7 @@ jobs:
   # ---------- 3. Прод-образ Docker ----------
   docker:
     name: Docker build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     needs: [quality, integration]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -196,7 +199,7 @@ jobs:
   # ---------- 4. Аудит зависимостей ----------
   audit:
     name: Dependency audit
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v7

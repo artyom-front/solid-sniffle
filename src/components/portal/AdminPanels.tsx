@@ -236,7 +236,8 @@ export function SchedulePanel({ seasonId, bump }: { seasonId: string; bump: () =
 const REGISTRATION_ROLE_OPTIONS = LIB_REGISTRATION_ROLE_OPTIONS;
 
 interface RegData {
-  persons: { id: string; name: string; position: string | null; isReferee?: boolean; teams: string[] }[];
+  // v1.0.46 · all=1: лёгкий DTO без position (панель его не показывает)
+  persons: { id: string; name: string; position?: string | null; isReferee?: boolean; teams: string[] }[];
 }
 
 interface RegListItem {
@@ -255,11 +256,14 @@ export function RegistrationsPanel({ seasonId, bump, version = 0, onOpenTeam, on
   const [number, setNumber] = useState("");
   const [role, setRole] = useState("PLAYER");
   const [endPrevious, setEndPrevious] = useState(true);
+  const [regDate, setRegDate] = useState("");
   const [busy, setBusy] = useState(false);
   const [query, setQuery] = useState("");
   const [regBusy, setRegBusy] = useState<string | null>(null);
 
-  const { data } = useFetch<RegData>(seasonId ? `/api/admin/persons?seasonId=${seasonId}` : null, version);
+  // v1.0.46 · all=1: полный список персон сезона (раньше первая страница —
+  // 50 по алфавиту — игрок «за пределами первых букв» не выбирался в заявке)
+  const { data } = useFetch<RegData>(seasonId ? `/api/admin/persons?all=1&seasonId=${seasonId}` : null, version);
   const { data: teamsData } = useFetch<{ teams: { id: string; name: string }[] }>(seasonId ? `/api/public/teams?seasonId=${seasonId}` : null, version);
   const { data: regsData, loading: regsLoading } = useFetch<{ registrations: RegListItem[] }>(seasonId ? `/api/admin/registrations?seasonId=${seasonId}` : null, version);
   const [teamId, setTeamId] = useState("");
@@ -273,7 +277,10 @@ export function RegistrationsPanel({ seasonId, bump, version = 0, onOpenTeam, on
     if (!personId || !teamId) return toast.error("Выберите игрока и команду");
     setBusy(true);
     const res = await apiPost("/api/admin/registrations", {
-      personId, teamId, seasonId, role, number: number ? Number(number) : null, endDatePrevious: endPrevious ? new Date().toISOString() : null,
+      personId, teamId, seasonId, role, number: number ? Number(number) : null,
+      // v1.0.46: дата заявки (для матчей задним числом — датируйте раньше)
+      startDate: regDate || undefined,
+      endDatePrevious: endPrevious ? new Date().toISOString() : null,
     });
     setBusy(false);
     if (!res.ok) return toast.error(res.error, { duration: 6000 });
@@ -354,6 +361,10 @@ export function RegistrationsPanel({ seasonId, bump, version = 0, onOpenTeam, on
                 <ArrowRightLeft className="mr-1 h-4 w-4" /> Заявить
               </Button>
             </div>
+          </div>
+          <div className="space-y-1">
+            <Label className="text-xs">Дата заявки</Label>
+            <Input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} className="bg-white" title="Пусто = сегодня. Для уже сыгранных матчей датируйте заявку раньше матча" />
           </div>
           <div className="flex items-center gap-2 lg:col-span-4">
             <Switch checked={endPrevious} onCheckedChange={setEndPrevious} id="endprev" />

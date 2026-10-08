@@ -66,8 +66,15 @@ function DialogContent({
         // диалога (репро: LinkDialog UsersPanel, +884px на 1440px, +974px
         // на 390px). [&>*]:min-w-0 разрешает трекам сжиматься — обрезка/
         // перенос включается у самих элементов (truncate / break-all).
+        //
+        // v1.0.52 · МОБИЛЬНЫЕ ФОРМЫ (фидбек: «верстка едет при вводе с
+        // телефона»): max-h-[92dvh] + overflow-y-auto — длинные диалоги
+        // (создание матча, персона+заявка, бригада) скроллятся, а не
+        // уезжают за экран; p-4 на телефоне (p-6 от sm) — больше места
+        // полям; overscroll-contain — скролл не «утаскивает» страницу
+        // под диалогом.
         className={cn(
-          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden rounded-lg border p-6 shadow-lg duration-200 [&>*]:min-w-0 sm:max-w-lg",
+          "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid max-h-[92dvh] w-full max-w-[calc(100%-1rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-x-hidden overflow-y-auto overscroll-contain rounded-lg border p-4 shadow-lg duration-200 sm:max-w-lg sm:p-6 [&>*]:min-w-0",
           className
         )}
         {...props}

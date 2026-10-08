@@ -8,6 +8,22 @@ import { audit } from "@/lib/engine/lifecycle";
 import { assertPlayerRegistrationAllowed } from "@/lib/engine/conflicts";
 import { assertSeasonInScope } from "@/lib/scope";
 import { isRegistrationRole, REGISTRATION_ROLE_CODES_TEXT } from "@/lib/registration-roles";
+import { SYSTEM_ROLE_CODES } from "@/lib/roles";
+
+/** v1.0.52 · СИНХРОНИЗАЦИЯ КАРТОЧКИ С ЗАЯВКОЙ (модель «персона → роли»):
+ *  заявка человека в команду тренером/директором/админом автоматически
+ *  добавляет эту роль и на КАРТОЧКУ (Person.roles). Золотой стандарт:
+ *  Person — личность (ФИО/фото — правится в основном профиле),
+ *  Registration — роль в команде на период (датированная история),
+ *  Person.roles — «кем человек является» (сумма компетенций).
+ *  Игрок, ставший тренером, НЕ «превращается» — ДОБАВЛЯЕТ роль: история
+ *  игры сохраняется, карточка остаётся одна. */
+async function syncCardRole(personId: string, role: string) {
+  if (!SYSTEM_ROLE_CODES.has(role)) return; // DELEGATE и кастомные — не карточные
+  const person = await db.person.findUnique({ where: { id: personId }, select: { roles: true } });
+  if (!person || person.roles.includes(role)) return;
+  await db.person.update({ where: { id: personId }, data: { roles: [...person.roles, role] } });
+}
 
 /** Список заявок сезона (для панели «Заявки» и контроля составов) */
 export async function GET(req: Request) {
@@ -48,7 +64,7 @@ export async function GET(req: Request) {
 export async function POST(req: Request) {
   try {
     const user = await requireRole("CLUB_ADMIN", "LEAGUE_ADMIN", "SUPER_ADMIN");
-    const { personId, teamId, seasonId, number, role, endDatePrevious } = await req.json();
+    const { personId, teamId, seasonId, number, role, startDate, endDatePrevious } = await req.json();
     if (!personId || !teamId || !seasonId) throw new HttpError(422, "Укажите игрока, команду и сезон");
     await assertSeasonInScope(user, seasonId);
 
@@ -98,28 +114,49 @@ export async function POST(req: Request) {
       await assertPlayerRegistrationAllowed(db, personId, seasonId);
     }
 
-    // завершаем предыдущую активную заявку игрока (трансфер)
+    // v1.0.46 · ДАТА НАЧАЛА ЗАЯВКИ — редактируемая (баг «создал игрока, а его
+    // нет в протоколе»): раньше всегда new Date(), и при вводе протокола
+    // матча задним числом (kickoff в прошлом) новый игрок НЕ ПОПАДАЛ в список
+    // доступных — заявка «начинается позже матча». Теперь дату можно задать
+    // (по умолчанию — сегодня): например, датировать заявку началом сезона.
+    const start = startDate ? new Date(String(startDate)) : new Date();
+    if (Number.isNaN(start.getTime())) throw new HttpError(422, "Дата начала заявки не распознана");
+    if (start > new Date(Date.now() + 24 * 3600 * 1000)) {
+      throw new HttpError(422, "Дата начала заявки не может быть в будущем");
+    }
+
+    // завершаем предыдущую активную заявку игрока (трансфер).
+    // v1.0.46: при датированной задним числом новой заявке прежняя закрывается
+    // днём ДО начала новой (окна заявок не пересекаются), но не раньше
+    // собственного startDate прежней (не создаём отрицательные интервалы).
     if (endDatePrevious) {
+      const requested = new Date(endDatePrevious);
+      const prevCeil = new Date(start.getTime() - 24 * 3600 * 1000);
       const active = await db.registration.findMany({
         where: { personId, seasonId, endDate: null },
       });
       for (const a of active) {
+        const end = Number.isNaN(requested.getTime())
+          ? prevCeil
+          : new Date(Math.max(a.startDate.getTime(), Math.min(requested.getTime(), prevCeil.getTime())));
         await db.registration.update({
           where: { id: a.id },
-          data: { endDate: new Date(endDatePrevious), status: "ENDED" },
+          data: { endDate: end, status: "ENDED" },
         });
-        await audit(user, "Registration", a.id, "UPDATE", { endDate: null }, { endDate: endDatePrevious });
+        await audit(user, "Registration", a.id, "UPDATE", { endDate: null }, { endDate: end.toISOString() });
       }
     }
 
     const reg = await db.registration.create({
       data: {
-        personId, teamId, seasonId, startDate: new Date(),
+        personId, teamId, seasonId, startDate: start,
         number: number ? Number(number) : null,
         role: finalRole,
       },
     });
-    await audit(user, "Registration", reg.id, "CREATE", null, { personId, teamId, seasonId, number, role });
+    // v1.0.52: заявка COACH/DIRECTOR/… добавляет роль и на карточку персоны
+    await syncCardRole(personId, finalRole);
+    await audit(user, "Registration", reg.id, "CREATE", null, { personId, teamId, seasonId, number, role, startDate: start.toISOString() });
 
     return Response.json({ ok: true, registration: reg });
   } catch (e) {

@@ -77,7 +77,10 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
 
   const { data: teamsData } = useFetch<{ teams: AdminTeam[] }>(form ? "/api/admin/teams" : null);
   const { data: stadiumsData } = useFetch<{ stadiums: AdminStadium[] }>(form ? "/api/admin/stadiums" : null);
-  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>(form ? "/api/admin/persons" : null);
+  // v1.0.46 · officials=1: ВЕСЬ судейский корпус без пагинации. Раньше
+  // брали первую страницу (50 персон по алфавиту) — «виден только Алексеев»,
+  // судьи с фамилиями дальше первых 50 в селекторе отсутствовали.
+  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>(form ? "/api/admin/persons?officials=1" : null);
 
   const leagues = overview?.leagues ?? [];
   const league = leagues.find((l) => l.id === (leagueId || leagues[0]?.id));
@@ -90,7 +93,10 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
   const matches = data?.matches ?? [];
   const teams = teamsData?.teams ?? [];
   const stadiums = stadiumsData?.stadiums ?? [];
-  const officialsPool = useMemo(() => (personsData?.persons ?? []).filter(isOfficialCandidate), [personsData]);
+  /** полный корпус для бригады (вкл. врача) — API уже отфильтровал */
+  const officialsPool = useMemo(() => personsData?.persons ?? [], [personsData]);
+  /** главный судья — только судейский корпус (без врача, v1.0.34) */
+  const refereePool = useMemo(() => officialsPool.filter(isOfficialCandidate), [officialsPool]);
 
   const allSelected = matches.length > 0 && matches.every((m) => selected.has(m.id));
 
@@ -306,10 +312,10 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
 
       {/* ---------- Диалог матча ---------- */}
       <Dialog open={!!form} onOpenChange={(o) => !o && setForm(null)}>
-        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+        <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>{form?.id ? "Редактировать матч" : "Новый матч"}</DialogTitle></DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Хозяева">
                 <select value={form.homeTeamId} disabled={form.isFinished} onChange={(e) => setForm({ ...form, homeTeamId: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm disabled:bg-zinc-50 disabled:text-zinc-400">
                   <option value="">— выберите —</option>
@@ -330,10 +336,10 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
                   {stadiums.map((s) => <option key={s.id} value={s.id}>{s.name}{s.city ? `, ${s.city}` : ""}</option>)}
                 </select>
               </Field>
-              <Field label="Главный судья" hint="судейский корпус; помощники/инспектор — в бригаде протокола">
+              <Field label="Главный судья" hint={`судейский корпус · доступно ${refereePool.length}; помощники/инспектор — в бригаде`}>
                 <select value={form.refereeId} onChange={(e) => setForm({ ...form, refereeId: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
                   <option value="">— не назначен —</option>
-                  {officialsPool.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                  {refereePool.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                 </select>
               </Field>
               {form.id && !form.isFinished && (
@@ -345,7 +351,7 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
                 </Field>
               )}
               {form.id && form.isFinished && (
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <Field label="Статус">
                     <Input disabled value={STATUS_LABELS[form.status] ?? "Управляется протоколом"} className="bg-zinc-50 text-zinc-400" />
                   </Field>
@@ -353,7 +359,7 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
               )}
 
               {/* ---------- Бригада: динамические строки «+/−» ---------- */}
-              <div className="col-span-2 space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
+              <div className="sm:col-span-2 space-y-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-3">
                 <div className="flex items-center justify-between">
                   <p className="text-xs font-bold uppercase tracking-wide text-zinc-500">Бригада матча</p>
                   <Button
@@ -409,19 +415,19 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
                 ))}
               </div>
 
-              <div className="col-span-2">
+              <div className="sm:col-span-2">
                 <Field label="Примечание"><Textarea value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} rows={2} placeholder="Причина переноса, организационная информация..." /></Field>
               </div>
 
               {/* подсказка для прошедшей даты: как ввести сыгранный матч */}
               {!form.id && form.kickoff && new Date(form.kickoff).getTime() < Date.now() && (
-                <div className="col-span-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700">
+                <div className="sm:col-span-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs leading-relaxed text-blue-700">
                   Дата в прошлом — вводите <b>уже сыгранный</b> матч? Создайте его, затем нажмите иконку протокола 📋 в списке:
                   составы → события → «Завершить». Статус «Завершён» и счёт выставятся автоматически.
                 </div>
               )}
               {form.isFinished && (
-                <div className="col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
+                <div className="sm:col-span-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs leading-relaxed text-amber-700">
                   Матч сыгран/закрыт: команды и статус не меняются (события привязаны к составам). Дата, стадион, тур, примечание и бригада — правятся свободно.
                 </div>
               )}

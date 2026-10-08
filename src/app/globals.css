@@ -288,3 +288,36 @@
   box-shadow: inset 3px 0 0 var(--gold);
 }
 
+
+/* ============================================================
+   v1.0.52 · МОБИЛЬНЫЕ ФОРМЫ АДМИНКИ (фидбек: «при заполнении
+   данных через телефон верстка едет»)
+
+   1) iOS Safari авто-зумит страницу при фокусе в поле с кеглем
+      <16px — поля «разъезжаются» и диалог вылезает за экран.
+      Лечится кеглем 16px на телефонах (золотой стандарт, доступнее,
+      чем блокировка зума в viewport).
+   2) Нативные select/textarea — те же правила.
+   3) Кнопки-строки составов протокола переносятся, а не уезжают
+      за экран (пометки «заявлен позднее», «бан N м.» — shrink-0).
+   ============================================================ */
+@media (max-width: 640px) {
+  input[type="text"], input[type="number"], input[type="date"],
+  input[type="datetime-local"], input[type="time"], input[type="email"],
+  input[type="password"], input[type="search"], input[type="tel"],
+  input[type="url"], select, textarea {
+    font-size: 16px !important;
+  }
+  /* числовые поля номера/минуты не раздувать: остаются компактными,
+     но кегль 16 — зума нет */
+  input[type="number"]::-webkit-inner-spin-button,
+  input[type="number"]::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  /* строки составов/заявок: перенос «хвостов» (бейджи, кнопки) —
+     вместо горизонтального переполнения */
+  .s21-row-wrap {
+    flex-wrap: wrap;
+  }
+}

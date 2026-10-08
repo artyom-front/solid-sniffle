@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Pencil, Users, MapPin, Megaphone, AlertTriangle, PlusCircle, UserPlus, ChevronLeft, ChevronRight, Info, GitMerge } from "lucide-react";
+import { Plus, Pencil, Users, MapPin, Megaphone, PlusCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { apiPost, useFetch } from "./hooks";
 import { EmptyState, LoadingBlock } from "./ui-bits";
 import { Field, DeleteBtn } from "./CrudPanels";
@@ -18,7 +18,8 @@ import { MediaUpload } from "./MediaUpload";
 import { SmartDelete } from "./SmartDelete";
 import { BulkBar, RowCheckbox } from "./BulkBar";
 import { AdMark } from "./visuals";
-import { SYSTEM_ROLES, ROLE_GROUP_LABELS, CARD_ROLE_CONFLICT_HINT, type RoleDef } from "@/lib/roles";
+import { SYSTEM_ROLES } from "@/lib/roles";
+import { PersonFields, PersonDupesNotice, emptyPersonForm, type PersonFormValue, type CustomRoleDTO } from "./PersonFields";
 import { cn } from "@/lib/utils";
 
 interface CrudProps {
@@ -26,8 +27,6 @@ interface CrudProps {
   onReload: () => void;
   version?: number;
 }
-
-interface CustomRoleDTO { id: string; code: string; name: string }
 
 // ============================================================
 // Персоны: игроки / тренеры / судьи / врачи / делегаты / VAR…
@@ -54,15 +53,10 @@ interface Duplicate { id: string; name: string; birthDate: string | null; roles:
 interface PersonsPage {
   persons: AdminPerson[];
   total: number;
+  pages: number;
   page: number;
   pageSize: number;
-  pages: number;
 }
-
-const emptyPerson = {
-  firstName: "", lastName: "", middleName: "", birthDate: "", position: "",
-  gender: "", roles: ["PLAYER"] as string[], photoUrl: "",
-};
 
 /** Компактная раскладка номеров страниц: 1 … 4 5 6 … 12 (лучшие практики —
  *  текущая страница ±1, края всегда видны, пропуски — многоточием) */
@@ -96,7 +90,7 @@ export function PeoplePanel({ bump, onReload, version = 0, onOpenPerson, userRol
     }, 300);
     return () => clearTimeout(t);
   }, [qInput]);
-  const [form, setForm] = useState<(typeof emptyPerson) & { id?: string } | null>(null);
+  const [form, setForm] = useState<(PersonFormValue & { id?: string }) | null>(null);
   const [saving, setSaving] = useState(false);
   const [dupes, setDupes] = useState<Duplicate[] | null>(null);
   const query = `/api/admin/persons?page=${page}&pageSize=50${q ? `&q=${encodeURIComponent(q)}` : ""}`;
@@ -115,8 +109,6 @@ export function PeoplePanel({ bump, onReload, version = 0, onOpenPerson, userRol
     const custom = customRoles.find((r) => r.code === code);
     return custom?.name ?? code;
   };
-  const isPlayer = form?.roles.includes("PLAYER") ?? false;
-  // «Нейтральная роль ≠ игрок»: судейский корпус/врач несовместимы с игроком на карточке
 
   const save = async (force = false) => {
     if (!form) return;
@@ -129,22 +121,23 @@ export function PeoplePanel({ bump, onReload, version = 0, onOpenPerson, userRol
     }, form.id ? "PATCH" : "POST");
     setSaving(false);
     if (!res.ok) {
-      // 409 с кандидатами-дублями — показываем, создаём только осознанно
+      // 409 с кандидатами-дублями (точное совпадение ФИО+ДР) — показываем,
+      // создаём только осознанно (v1.0.52: res.data при ошибке теперь доезжает)
       if (res.data?.duplicates) setDupes(res.data.duplicates);
       return toast.error(res.error);
+    }
+    // v1.0.52 · advisory: тёзки создаются свободно — напоминаем про Merge
+    if (res.data?.duplicates?.length) {
+      toast.info(
+        `В базе уже есть человек с таким же ФИО (${res.data.duplicates.map((d) => d.name).join(", ")}). Если это дубль — объедините профили в «Merge профилей».`,
+        { duration: 8000 }
+      );
     }
     toast.success(form.id ? "Профиль обновлён" : "Персона создана");
     setForm(null);
     setDupes(null);
     bump();
     onReload();
-  };
-
-  const toggleRole = (code: string) => {
-    if (!form) return;
-    const has = form.roles.includes(code);
-    const roles = has ? form.roles.filter((r) => r !== code) : [...form.roles, code];
-    setForm({ ...form, roles, position: has && code === "PLAYER" ? "" : form.position });
   };
 
   const createCustomRole = async () => {
@@ -159,13 +152,6 @@ export function PeoplePanel({ bump, onReload, version = 0, onOpenPerson, userRol
   };
 
   const persons = data?.persons ?? [];
-
-  const groups: { group: RoleDef["group"]; roles: { code: string; name: string }[] }[] = (
-    ["team", "officials", "medicine"] as const
-  ).map((group) => ({
-    group,
-    roles: SYSTEM_ROLES.filter((r) => r.group === group).map((r) => ({ code: r.code, name: r.name })),
-  }));
 
   return (
     <div className="space-y-4">
@@ -185,7 +171,7 @@ export function PeoplePanel({ bump, onReload, version = 0, onOpenPerson, userRol
             className="h-9 w-56"
             aria-label="Поиск людей"
           />
-          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => { setForm({ ...emptyPerson }); setDupes(null); }}>
+          <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => { setForm(emptyPersonForm()); setDupes(null); }}>
             <Plus className="mr-1 h-4 w-4" /> Персона
           </Button>
         </div>
@@ -319,134 +305,26 @@ export function PeoplePanel({ bump, onReload, version = 0, onOpenPerson, userRol
         <DialogContent className="sm:max-w-xl">
           <DialogHeader><DialogTitle>{form?.id ? "Редактировать персону" : "Новая персона"}</DialogTitle></DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Фамилия"><Input value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></Field>
-              <Field label="Имя"><Input value={form.firstName} onChange={(e) => setForm({ ...form, firstName: e.target.value })} /></Field>
-              <Field label="Отчество"><Input value={form.middleName} onChange={(e) => setForm({ ...form, middleName: e.target.value })} /></Field>
-              <Field label="Дата рождения" hint="Защита от дублей — по ФИО и дате"><Input type="date" value={form.birthDate} onChange={(e) => setForm({ ...form, birthDate: e.target.value })} /></Field>
-              <Field label="Пол">
-                <select value={form.gender} onChange={(e) => setForm({ ...form, gender: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
-                  <option value="">— не указан —</option>
-                  <option value="MALE">Мужской</option>
-                  <option value="FEMALE">Женский</option>
-                </select>
-              </Field>
-              {isPlayer && (
-                <Field label="Позиция (для роли «Игрок»)">
-                  <select value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
-                    <option value="">— не указана —</option>
-                    <option value="GK">Вратарь</option>
-                    <option value="DF">Защитник</option>
-                    <option value="MF">Полузащитник</option>
-                    <option value="FW">Нападающий</option>
-                  </select>
-                </Field>
-              )}
-              <div className="col-span-2">
-                <MediaUpload value={form.photoUrl} onChange={(url) => setForm({ ...form, photoUrl: url })} label="Фото персоны" hint="JPG/PNG/WebP, до 6 МБ — сожмётся автоматически" round />
+            <div className="space-y-3">
+              {/* v1.0.52 · ЕДИНАЯ ФОРМА ПЕРСОНЫ (PersonFields): та же, что в
+                  карточке команды → «В заявку» → «Создать нового» — один
+                  интерфейс создания, знакомый везде */}
+              <div className="flex justify-end">
+                <button onClick={() => setNewRoleOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
+                  <PlusCircle className="h-3.5 w-3.5" /> своя роль
+                </button>
               </div>
-              <div className="col-span-2 space-y-2">
-                <div className="flex items-center justify-between">
-                  <label className="text-xs font-semibold text-zinc-600">Специализации (можно несколько)</label>
-                  <button onClick={() => setNewRoleOpen(true)} className="flex items-center gap-1 text-xs font-semibold text-emerald-600 hover:text-emerald-700">
-                    <PlusCircle className="h-3.5 w-3.5" /> своя роль
-                  </button>
-                </div>
-                <p className="text-[11px] leading-snug text-zinc-400">
-                  «Судья (судейский корпус)» — единая роль: главный, помощник, инспектор, делегат и т.д. — это ДОЛЖНОСТИ, назначаемые в конкретном матче.
-                  Игрок совместим с любой ролью: играет в одной лиге, судит другую. В одном чемпионате и сезоне совмещение запрещено (проверяется автоматически).
-                </p>
-                {groups.map((g) => (
-                  <div key={g.group}>
-                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">{ROLE_GROUP_LABELS[g.group]}</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {g.roles.map((r) => {
-                        const active = form.roles.includes(r.code);
-                        return (
-                          <button
-                            key={r.code}
-                            type="button"
-                            onClick={() => toggleRole(r.code)}
-                            className={cn(
-                              "rounded-full px-2.5 py-1 text-xs font-medium transition-colors",
-                              active ? "bg-emerald-600 text-white" : "bg-zinc-100 text-zinc-600 hover:bg-zinc-200"
-                            )}
-                          >
-                            {r.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-                {customRoles.length > 0 && (
-                  <div>
-                    <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-zinc-400">Свои роли</p>
-                    <div className="flex flex-wrap gap-1.5">
-                      {customRoles.map((r) => {
-                        const active = form.roles.includes(r.code);
-                        return (
-                          <button
-                            key={r.code}
-                            type="button"
-                            onClick={() => toggleRole(r.code)}
-                            className={cn(
-                              "rounded-full border border-dashed px-2.5 py-1 text-xs font-medium transition-colors",
-                              active ? "border-emerald-600 bg-emerald-600 text-white" : "border-zinc-300 bg-white text-zinc-600 hover:bg-zinc-50"
-                            )}
-                          >
-                            {r.name}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* ---- v1.0.34: игрок + судья — нормально, подсказка ---- */}
-              {isPlayer && form.roles.includes("REFEREE") && (
-                <div className="col-span-2 space-y-1.5 rounded-lg border border-sky-200 bg-sky-50 p-3">
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-sky-800">
-                    <Info className="h-3.5 w-3.5" /> Игрок и судья одновременно — это нормально
-                  </p>
-                  <p className="text-xs text-sky-700">{CARD_ROLE_CONFLICT_HINT}</p>
-                </div>
-              )}
-
-              {/* ---- предупреждение о дубле ---- */}
-              {dupes && dupes.length > 0 && (
-                <div className="col-span-2 space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                  <p className="flex items-center gap-1.5 text-xs font-bold text-amber-800">
-                    <AlertTriangle className="h-3.5 w-3.5" /> Похоже, этот человек уже есть:
-                  </p>
-                  {dupes.map((d) => (
-                    <div key={d.id} className="flex flex-wrap items-center gap-2">
-                      <p className="min-w-0 flex-1 text-xs text-amber-700">
-                        {d.name}{d.birthDate ? ` · ${d.birthDate}` : ""}{d.roles.length ? ` · ${d.roles.map(roleName).join(", ")}` : ""}{d.teams.length ? ` · ${d.teams.join(", ")}` : ""}
-                      </p>
-                      {onOpenPerson && (
-                        <Button
-                          size="sm" variant="ghost" className="h-6 px-2 text-[11px] text-amber-800 hover:bg-amber-100"
-                          onClick={() => { setForm(null); setDupes(null); onOpenPerson(d.id); }}
-                          title="Открыть карточку похожей персоны и решить на месте"
-                        >
-                          Открыть карточку
-                        </Button>
-                      )}
-                    </div>
-                  ))}
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Button size="sm" variant="outline" className="h-7 border-amber-300 bg-white text-xs text-amber-800 hover:bg-amber-100" disabled={saving} onClick={() => save(true)}>
-                      <UserPlus className="mr-1 h-3 w-3" /> Это другой человек — создать всё равно
-                    </Button>
-                    <p className="flex items-center gap-1 text-[11px] text-amber-600">
-                      <GitMerge className="h-3 w-3 shrink-0" />
-                      Создали дубль случайно? Объедините профили позже в разделе «Merge профилей».
-                    </p>
-                  </div>
-                </div>
-              )}
+              <PersonFields
+                value={form}
+                onChange={(v) => setForm({ ...form, ...v })}
+                customRoles={customRoles}
+              />
+              <PersonDupesNotice
+                dupes={dupes ?? []}
+                busy={saving}
+                onForce={() => save(true)}
+                onOpenPerson={onOpenPerson ? (pid) => { setForm(null); setDupes(null); onOpenPerson(pid); } : undefined}
+              />
             </div>
           )}
           <DialogFooter>
@@ -550,7 +428,7 @@ export function StadiumsPanel({ bump, onReload, version = 0 }: CrudProps) {
               <Field label="Город"><Input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} placeholder="Чебоксары" /></Field>
               <Field label="Адрес"><Input value={form.address} onChange={(e) => setForm({ ...form, address: e.target.value })} /></Field>
               <Field label="Вместимость"><Input type="number" value={form.capacity} onChange={(e) => setForm({ ...form, capacity: e.target.value })} placeholder="15000" /></Field>
-              <MediaUpload value={form.photoUrl} onChange={(url) => setForm({ ...form, photoUrl: url })} label="Фото арены" hint="Появится на странице стадиона" />
+              <MediaUpload value={form.photoUrl} onChange={(url) => setForm({ ...form, photoUrl: url })} label="Фото арены" hint="Горизонтальное 16:9, от 1200×675 — страница стадиона" />
             </div>
           )}
           <DialogFooter>
@@ -760,7 +638,7 @@ export function BannersPanel({ bump, onReload, version = 0 }: CrudProps) {
           {form && (
             <div className="space-y-3">
               <BannerPreview form={form} />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Заголовок"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></Field>
                 <Field label="Слот">
                   <select value={form.placement} onChange={(e) => setForm({ ...form, placement: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
@@ -774,7 +652,7 @@ export function BannersPanel({ bump, onReload, version = 0 }: CrudProps) {
                   <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
                   <span className="text-sm text-zinc-600">Активен</span>
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <MediaUpload
                     value={form.imageUrl}
                     onChange={(url) => setForm((f) => (f ? { ...f, imageUrl: url } : f))}

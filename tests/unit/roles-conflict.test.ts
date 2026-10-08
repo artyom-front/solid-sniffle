@@ -87,14 +87,16 @@ describe("Судейский корпус · единая роль (v1.0.34)", (
     expect(roleName("c:abc")).toBe("c:abc");
   });
 
-  test("карточных ролей — 12: 10 команда + 1 корпус + 1 медицина", () => {
-    expect(SYSTEM_ROLES).toHaveLength(12);
+  test("карточных ролей — 13: 11 команда + 1 корпус + 1 медицина (v1.0.52: + Директор)", () => {
+    expect(SYSTEM_ROLES).toHaveLength(13);
     for (const r of SYSTEM_ROLES) {
       expect(["team", "officials", "medicine"]).toContain(r.group);
     }
-    expect(SYSTEM_ROLES.filter((r) => r.group === "team")).toHaveLength(10);
+    expect(SYSTEM_ROLES.filter((r) => r.group === "team")).toHaveLength(11);
     expect(SYSTEM_ROLES.filter((r) => r.group === "officials")).toHaveLength(1);
     expect(SYSTEM_ROLES.filter((r) => r.group === "medicine")).toHaveLength(1);
+    // v1.0.52: роль «Директор» — заявочная административная роль
+    expect(SYSTEM_ROLES.find((r) => r.code === "DIRECTOR")?.name).toBe("Директор");
   });
 
   test("должности бригады матча — полный набор (главный…врач)", () => {

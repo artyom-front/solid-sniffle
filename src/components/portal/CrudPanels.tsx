@@ -213,7 +213,7 @@ export function TournamentsPanel({ bump, onReload, version = 0, onNavigate }: Cr
             <DialogTitle>{leagueForm?.id ? "Редактировать лигу" : "Новая лига"}</DialogTitle>
           </DialogHeader>
           {leagueForm && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Название"><Input value={leagueForm.name} onChange={(e) => setLeagueForm({ ...leagueForm, name: e.target.value })} placeholder="Премьер-лига ФФ Чувашии" /></Field>
               <Field label="Короткое имя" hint="Для сайдбара и виджетов"><Input value={leagueForm.shortName} onChange={(e) => setLeagueForm({ ...leagueForm, shortName: e.target.value })} placeholder="Премьер-лига" /></Field>
               <Field label="Формат" hint="Список ведётся в «Сайт → Виды футбола»">
@@ -447,7 +447,7 @@ export function ClubsTeamsPanel({ bump, onReload, version = 0, onOpenTeam, userR
                 </select>
               </Field>
               <Field label="Город"><Input value={teamForm.city} onChange={(e) => setTeamForm({ ...teamForm, city: e.target.value })} placeholder="Чебоксары" /></Field>
-              <MediaUpload value={teamForm.logoUrl} onChange={(url) => setTeamForm({ ...teamForm, logoUrl: url })} label="Эмблема команды" hint="Квадратная картинка — показывается на странице команды" />
+              <MediaUpload value={teamForm.logoUrl} onChange={(url) => setTeamForm({ ...teamForm, logoUrl: url })} label="Эмблема команды" hint="Квадрат от 200×200 (в матчах — от 20px, на странице команды 56px — не расплывётся)" />
             </div>
           )}
           <DialogFooter>
@@ -466,7 +466,7 @@ export function ClubsTeamsPanel({ bump, onReload, version = 0, onOpenTeam, userR
               <Field label="Название"><Input value={clubForm.name} onChange={(e) => setClubForm({ ...clubForm, name: e.target.value })} placeholder="ФК «Урняк»" /></Field>
               <Field label="Город"><Input value={clubForm.city} onChange={(e) => setClubForm({ ...clubForm, city: e.target.value })} /></Field>
               <Field label="Описание"><Input value={clubForm.description} onChange={(e) => setClubForm({ ...clubForm, description: e.target.value })} /></Field>
-              <MediaUpload value={clubForm.logoUrl} onChange={(url) => setClubForm({ ...clubForm, logoUrl: url })} label="Эмблема клуба" hint="Общая для всех команд клуба" />
+              <MediaUpload value={clubForm.logoUrl} onChange={(url) => setClubForm({ ...clubForm, logoUrl: url })} label="Эмблема клуба" hint="Квадрат от 200×200 — общая для всех команд клуба" />
             </div>
           )}
           <DialogFooter>

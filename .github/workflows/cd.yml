@@ -8,6 +8,8 @@
 #   3. деплой на VPS по SSH: образ, миграции, health-check
 #   4. при неудачном health-check — автоматический откат на прошлый тег
 # Откат вручную: scripts/rollback.sh на сервере или rerun с прежним тегом.
+# Раннеры: ПИН ubuntu-24.04 (2026-10-06, Task 52) — лейбл ubuntu-latest
+#   уедет на Ubuntu 26 с 2026-10-19 (actions/runner-images#14748).
 # ============================================================
 
 name: CD
@@ -40,7 +42,7 @@ jobs:
   # ---------- 1. Сборка и публикация образа ----------
   build:
     name: Build & push (GHCR)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # БЕЗ packages: write push в GHCR падает:
     # «denied: installation not allowed to Create organization package»
     permissions:
@@ -129,7 +131,7 @@ jobs:
   # ---------- 2. Деплой на сервер ----------
   deploy:
     name: Deploy → VPS
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: build
     # для docker pull на сервере достаточно чтения пакетов
     permissions:
@@ -208,7 +210,7 @@ jobs:
   # ---------- 3. Откат (ручной, отдельный job с approval) ----------
   rollback:
     name: Rollback (ручной)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     environment: production-rollback
     # откат нужен только если УПАЛ ДЕПЛОЙ (деплой на сервер реально стартовал);
     # при падении сборки/пропуске deploy — откат не нужен и не запускается

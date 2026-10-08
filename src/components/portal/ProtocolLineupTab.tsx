@@ -23,8 +23,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { Ban, CheckCircle2, Hash, Users, X } from "lucide-react";
+import { Ban, CalendarClock, CheckCircle2, Hash, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiPost } from "./hooks";
 import { STARTER_LIMITS, REGISTRATION_ROLE_LABELS } from "@/lib/labels";
@@ -40,7 +41,14 @@ export interface EligiblePlayer {
   regRole: string;
   /** № из последнего матча команды до этого — предзаполнение */
   lastNumber: number | null;
+  /** v1.0.46: false — заявка началась ПОЗЖЕ матча (ввод протокола
+   *  задним числом): игрок виден с пометкой, дата заявки правится
+   *  подтверждением при подаче состава */
   registrationOk: boolean;
+  /** id заявки — для переноса даты из протокола */
+  registrationId: string | null;
+  /** дата начала заявки (ISO) — для подписи */
+  registrationStart: string | null;
   suspension: { matchesRemaining: number; isLifetime: boolean; source: string } | null;
 }
 
@@ -124,6 +132,8 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
   const m = data.match;
   const team = side === "home" ? m.homeTeam : m.awayTeam;
   const eligibleSide = data.eligible[side];
+  // v1.0.46 · подтверждение переноса даты поздних заявок
+  const [lateConfirm, setLateConfirm] = useState(false);
   const players = useMemo(
     () => eligibleSide.filter((p) => p.regRole === "PLAYER"),
     [eligibleSide]
@@ -163,6 +173,12 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
   const selectedPlayers = players.filter((p) => sel.has(p.personId));
   const selectedStaff = staff.filter((p) => sel.has(p.personId));
   const starterCount = selectedPlayers.filter((p) => starters.has(p.personId)).length;
+
+  /** v1.0.46 · поздние заявки в составе: заявка началась позже матча —
+   *  при подаче состава предложим перенести дату заявки на дату матча */
+  const lateInLineup = selectedPlayers.filter((p) => !p.registrationOk);
+  const lateStaff = selectedStaff.filter((p) => !p.registrationOk);
+  const lateIds = new Set([...lateInLineup, ...lateStaff].map((p) => p.personId));
 
   // дубли номеров среди игроков в протоколе (дёшево: десятки строк — без memo)
   const dupNumbers = (() => {
@@ -237,15 +253,27 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
     });
   };
 
-  /** v1.0.34 · капитан: один на команду; повторный клик — снять */
+  /** v1.0.52 · капитан: ОДИН на команду — если капитан уже назначен,
+   *  другого отметить НЕЛЬЗЯ (фидбек юзера: «если его пометили, то
+   *  больше уже нельзя»). Смена капитана — два явных клика: сначала
+   *  снять прежнего (повторный клик по его «К»), затем назначить нового.
+   *  Повторный клик по действующему капитану — снимает пометку. */
   const toggleCaptain = (p: EligiblePlayer) => {
     if (p.regRole !== "PLAYER") {
       toast.error("Капитан — игрок, а не представитель штаба", { duration: 4000 });
       return;
     }
+    const current = captain;
+    if (current && current !== p.personId) {
+      const currentName = eligibleSide.find((x) => x.personId === current)?.name ?? "другой игрок";
+      toast.error(
+        `В команде уже есть капитан — ${currentName}. Сначала снимите его (повторный клик по его кнопке «К»), затем назначьте нового.`,
+        { duration: 6000 }
+      );
+      return;
+    }
     setOverrides((s) => {
       const key = `${side}Captain` as "homeCaptain" | "awayCaptain";
-      const current = s[key] !== undefined ? s[key] : savedCaptain;
       return { ...s, [key]: current === p.personId ? null : p.personId };
     });
   };
@@ -295,7 +323,7 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
     }));
   };
 
-  async function submitLineup() {
+  async function submitLineup(overrideLate = false) {
     if (hasDup) {
       const [num, names] = dupNumbers[0];
       toast.error(`Одинаковые номера в одной команде запрещены: №${num} — ${names.join(", ")}`, { duration: 6000 });
@@ -305,7 +333,26 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
       toast.error(`Стартовый состав: ${starterCount} из ${limit}. Снимите лишних игроков со старта.`, { duration: 6000 });
       return;
     }
+    // v1.0.46 · поздние заявки: сначала подтверждение — переносим дату
+    // заявки на дату матча (явное действие с аудитом), потом подаём состав
+    const late = [...lateInLineup, ...lateStaff];
+    if (late.length > 0 && !overrideLate) {
+      setLateConfirm(true);
+      return;
+    }
     setBusy(true);
+    if (overrideLate && late.length > 0) {
+      for (const p of late) {
+        if (!p.registrationId) continue;
+        const res = await apiPost(`/api/admin/registrations/${p.registrationId}`, { startDate: m.kickoff }, "PATCH");
+        if (!res.ok) {
+          setBusy(false);
+          toast.error(`Не удалось перенести дату заявки ${p.name}: ${res.error}`, { duration: 8000 });
+          return;
+        }
+      }
+      toast.info(`Дата заявки перенесена на дату матча: ${late.map((p) => p.name).join(", ")}`, { duration: 6000 });
+    }
     const personIds = [...sel];
     const starterIds = [...starters].filter((pid) => sel.has(pid) && !staff.some((x) => x.personId === pid));
     const numbers = selectedPlayers
@@ -321,12 +368,13 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
     });
     setBusy(false);
     if (!res.ok) {
-      toast.error(res.error, { duration: 6000 });
+      toast.error(res.error, { duration: 8000 });
       return;
     }
     toast.success(
       `Состав ${team.name} подан: старт ${starterIds.length}, запас ${personIds.length - starterIds.length - selectedStaff.length}, штат ${selectedStaff.length}`
     );
+    setLateConfirm(false);
     onReload();
   }
 
@@ -385,7 +433,21 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
         <p className="text-[11px] leading-snug text-zinc-400">
           Отметьте игроков — первые {limit} попадают в старт, остальные в запас. Номер вводится на матч:
           подставляется последний номер игрока в команде (или из заявки), можно изменить. Кнопка «К» —
-          капитан в этом матче (один на команду). Затем добавьте тренера и руководство — без номеров.
+          капитан (один на команду; смена — сначала снять прежнего повторным кликом, затем назначить нового).
+          Затем добавьте тренера и руководство — без номеров.
+        </p>
+
+        {/* v1.0.46 · откуда берётся список: заявки сезона на дату матча */}
+        <p className="text-[11px] leading-snug text-zinc-400">
+          {m.season
+            ? <>В списке — игроки с действующей заявкой за команду в сезоне «{m.season.name}». Нет нужного игрока? Добавьте его в заявку: карточка команды → «В заявку».</>
+            : <>Товарищеский матч: в списке — последние действующие заявки команды (любой сезон).</>}
+          {players.filter((p) => !p.registrationOk).length > 0 && (
+            <span className="mt-0.5 block text-amber-600">
+              {players.filter((p) => !p.registrationOk).length} заявл. после даты матча — видны с пометкой
+              <CalendarClock className="ml-0.5 inline h-3 w-3" />; при подаче состава подтвердите перенос даты заявки.
+            </span>
+          )}
         </p>
 
         <div className="max-h-80 space-y-1 overflow-y-auto pr-1">
@@ -401,7 +463,7 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
               <div
                 key={p.personId}
                 className={cn(
-                  "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors",
+                  "s21-row-wrap flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors",
                   suspended
                     ? "border-red-200 bg-red-50 opacity-80"
                     : isSelected
@@ -419,6 +481,15 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
                   </span>
                   <span className="flex-1 truncate font-medium">{p.name}</span>
                   {p.position && <span className="shrink-0 text-xs text-zinc-400">{p.position}</span>}
+                  {/* v1.0.46 · поздняя заявка: видно, почему игрок «не заявлен на дату» */}
+                  {!p.registrationOk && (
+                    <span
+                      className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-amber-600"
+                      title={`Заявка с ${p.registrationStart ? new Date(p.registrationStart).toLocaleDateString("ru-RU") : "?"} — позже матча ${new Date(m.kickoff).toLocaleDateString("ru-RU")}. Подав состав, подтвердите перенос даты заявки.`}
+                    >
+                      <CalendarClock className="h-3 w-3" /> заявлен {p.registrationStart ? new Date(p.registrationStart).toLocaleDateString("ru-RU") : "позже матча"}
+                    </span>
+                  )}
                   {p.suspension && (
                     <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-red-600">
                       <Ban className="h-3 w-3" />
@@ -468,9 +539,17 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
                       "shrink-0 rounded-md border px-2 py-1 text-[11px] font-bold transition-colors",
                       captain === p.personId
                         ? "border-gold/60 bg-gold/15 text-amber-600"
-                        : "border-zinc-200 bg-white text-zinc-400 hover:border-amber-300 hover:text-amber-600"
+                        : captain
+                          ? "border-zinc-200 bg-white text-zinc-300" // v1.0.52: капитан уже есть — кнопки приглушены
+                          : "border-zinc-200 bg-white text-zinc-400 hover:border-amber-300 hover:text-amber-600"
                     )}
-                    title={captain === p.personId ? "Снять капитана (клик повторно)" : "Назначить капитаном этого матча"}
+                    title={
+                      captain === p.personId
+                        ? "Снять капитана (клик повторно)"
+                        : captain
+                          ? `Капитан уже назначен — сначала снимите его (клик по его «К»)`
+                          : "Назначить капитаном этого матча"
+                    }
                     aria-pressed={captain === p.personId}
                   >
                     К
@@ -493,7 +572,7 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
                   <div
                     key={p.personId}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors",
+                      "s21-row-wrap flex w-full items-center gap-2 rounded-lg border px-2.5 py-1.5 text-sm transition-colors",
                       suspended
                         ? "border-red-200 bg-red-50 opacity-80"
                         : isSelected
@@ -510,6 +589,11 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
                         {isSelected && !suspended && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
                       </span>
                       <span className="flex-1 truncate font-medium">{p.name}</span>
+                      {!p.registrationOk && (
+                        <span className="flex shrink-0 items-center gap-1 text-[11px] font-medium text-amber-600" title="Заявка началась позже матча — при подаче подтвердите перенос даты">
+                          <CalendarClock className="h-3 w-3" />
+                        </span>
+                      )}
                       {p.suspension && (
                         <span className="flex shrink-0 items-center gap-1 text-xs font-medium text-red-600">
                           <Ban className="h-3 w-3" />
@@ -534,7 +618,39 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
           onClick={() => submitLineup()}
         >
           {dirty ? "Сохранить состав" : "Подать состав повторно"} ({selectedPlayers.length + selectedStaff.length})
+          {lateInLineup.length + lateStaff.length > 0 ? ` · заявка позже матча: ${lateInLineup.length + lateStaff.length}` : ""}
         </Button>
+
+        {/* v1.0.46 · подтверждение: поздние заявки → переносим дату на матч */}
+        <Dialog open={lateConfirm} onOpenChange={(o) => !o && setLateConfirm(false)}>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <CalendarClock className="h-4 w-4 text-amber-600" /> Заявка позже даты матча
+              </DialogTitle>
+            </DialogHeader>
+            <p className="text-sm leading-relaxed text-zinc-600">
+              {[...lateInLineup, ...lateStaff].map((p) => (
+                <span key={p.personId} className="block">
+                  <b>{p.name}</b> — заявка с {p.registrationStart ? new Date(p.registrationStart).toLocaleDateString("ru-RU") : "?"},
+                  матч — {new Date(m.kickoff).toLocaleDateString("ru-RU")}.
+                </span>
+              ))}
+              По регламенту игрок должен быть заявлен на дату матча. Перенести дату начала заявки на дату матча
+              и подать состав? Действие попадёт в журнал аудита.
+            </p>
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setLateConfirm(false)}>Отмена</Button>
+              <Button
+                className="bg-amber-600 hover:bg-amber-700"
+                disabled={busy}
+                onClick={() => { setLateConfirm(false); void submitLineup(true); }}
+              >
+                {busy ? "Сохранение…" : "Перенести дату и подать"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       </CardContent>
     </Card>
   );

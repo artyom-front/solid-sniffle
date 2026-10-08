@@ -15,6 +15,7 @@ import { assertSeasonInScope } from "@/lib/scope";
 import { audit } from "@/lib/engine/lifecycle";
 import { assertPlayerRegistrationAllowed } from "@/lib/engine/conflicts";
 import { isRegistrationRole, REGISTRATION_ROLE_CODES_TEXT } from "@/lib/registration-roles";
+import { SYSTEM_ROLE_CODES } from "@/lib/roles";
 
 async function loadRegistration(id: string) {
   const reg = await db.registration.findUnique({
@@ -50,6 +51,23 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const body = await req.json();
     const data: Record<string, unknown> = {};
 
+    // v1.0.46 · ДАТА НАЧАЛА ЗАЯВКИ — редактируемая (баг пост-фактум
+    // протоколов): заявка, начатая «сегодня», закрывала игроку доступ к
+    // составу на матчи с kickoff в прошлом. Правка даты — тот же PATCH.
+    if (body.startDate !== undefined) {
+      if (body.startDate === null || body.startDate === "") {
+        throw new HttpError(422, "Дата начала заявки обязательна — укажите, с какой даты игрок заявлен");
+      }
+      const d = new Date(String(body.startDate));
+      if (Number.isNaN(d.getTime())) throw new HttpError(422, "Дата начала заявки не распознана");
+      if (d > new Date(Date.now() + 24 * 3600 * 1000)) {
+        throw new HttpError(422, "Дата начала заявки не может быть в будущем");
+      }
+      if (reg.endDate && d > reg.endDate) {
+        throw new HttpError(422, `Дата начала позже конца заявки (${reg.endDate.toLocaleDateString("ru-RU")}) — сначала продлите заявку`);
+      }
+      data.startDate = d;
+    }
     if (body.number !== undefined) {
       if (body.number === null || body.number === "") data.number = null;
       else {
@@ -86,6 +104,15 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     if (Object.keys(data).length === 0) throw new HttpError(422, "Нет полей для обновления");
 
     const updated = await db.registration.update({ where: { id }, data });
+    // v1.0.52 · смена роли заявки (игрок → тренер/директор/…) синхронизирует
+    // карточку персоны: новая роль добавляется в Person.roles — история
+    // игры сохраняется, «играющий тренер» получает обе роли на карточке
+    if (typeof data.role === "string" && data.role !== reg.role) {
+      const person = await db.person.findUnique({ where: { id: reg.personId }, select: { roles: true } });
+      if (person && SYSTEM_ROLE_CODES.has(data.role) && !person.roles.includes(data.role)) {
+        await db.person.update({ where: { id: reg.personId }, data: { roles: [...person.roles, data.role] } });
+      }
+    }
     await audit(user, "Registration", id, "UPDATE", reg, updated);
     return Response.json({ ok: true, registration: updated });
   } catch (e) {

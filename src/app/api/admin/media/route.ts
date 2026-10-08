@@ -1,6 +1,6 @@
 // Загрузка медиафайлов (фото персон/клубов/команд/стадионов, файлы протоколов).
 // POST multipart/form-data: file=<image|pdf>
-// Изображения автоматически уменьшаются до 1200px и конвертируются в WebP (sharp).
+// Изображения автоматически уменьшаются до 1920px и конвертируются в WebP (sharp).
 // Возвращает { url: "/api/media/<id>", ... } — URL кладётся в поле сущности.
 // DELETE ?url=/api/media/<id> — удаление.
 // v1.0.42 (аудит 2026-10-05): DELETE — только SUPER_ADMIN. У Media нет модели
@@ -15,8 +15,12 @@ import { audit } from "@/lib/engine/lifecycle";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
 const FILE_TYPES = [...IMAGE_TYPES, "application/pdf"];
-const MAX_IMAGE_BYTES = 6 * 1024 * 1024; // 6 МБ до обработки
+const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 МБ до обработки
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 МБ для PDF
+/** v1.0.46: 1920px по длинной стороне — фоновые баннеры (BACKGROUND)
+ *  рекомендуются 1920×1080 и раньше сжимались до 1200 (мыло на больших
+ *  экранах). WebP q82 держит размер в сотни КБ — БД не распухает. */
+const IMAGE_MAX_DIM = 1920;
 
 export async function POST(req: Request) {
   try {
@@ -38,12 +42,12 @@ export async function POST(req: Request) {
     let filename = file.name || null;
 
     if (isImage) {
-      // нормализация: максимум 1200px по длинной стороне, WebP — экономит место в БД
+      // нормализация: максимум 1920px по длинной стороне, WebP — экономит место в БД
       const sharp = (await import("sharp")).default;
       const buf = Buffer.from(await file.arrayBuffer());
       data = await sharp(buf)
         .rotate() // учитываем EXIF-ориентацию (фото с телефона)
-        .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
+        .resize(IMAGE_MAX_DIM, IMAGE_MAX_DIM, { fit: "inside", withoutEnlargement: true })
         .webp({ quality: 82 })
         .toBuffer();
       outMime = "image/webp";

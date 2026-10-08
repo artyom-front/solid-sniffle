@@ -5,6 +5,7 @@ import { db } from "@/lib/db";
 import { HttpError } from "@/lib/http";
 import type { SessionUser } from "@/lib/auth";
 import { assertNotSuspended, processMatchDiscipline, revertMatchDiscipline, autoYellowServedSnapshot, recomputeYellowAccrual } from "./discipline";
+import { computeMatchState } from "./match-state";
 
 // ---------- Аудит (инвариант №4) ----------
 
@@ -41,7 +42,14 @@ export interface EligiblePlayer {
   regRole: string;
   /** Номер из ПОСЛЕДНЕГО матча этой команды до текущего — предзаполнение */
   lastNumber: number | null;
+  /** true — заявка покрывает дату матча. false — заявка началась ПОЗЖЕ
+   *  матча (ввод протокола задним числом): игрок виден с предупреждением,
+   *  дата заявки правится одним кликом (v1.0.46) */
   registrationOk: boolean;
+  /** id заявки (Registration) — для быстрой правки даты из протокола */
+  registrationId: string | null;
+  /** дата начала заявки — для подписи «заявлен …» */
+  registrationStart: string | null;
   suspension: { matchesRemaining: number; isLifetime: boolean; source: string } | null;
 }
 
@@ -76,9 +84,45 @@ export async function getLastNumbers(teamId: string, before: Date): Promise<Map<
   return map;
 }
 
+/** v1.0.46 · РАЗРЕШЕНИЕ ДУБЛЕЙ в списке протокола: одна персона = одна
+ *  строка. Окна заявок могут ПЕРЕСЕКАТЬСЯ (трансфер: прежнюю не закрыли
+ *  вовремя; аудит №9 — исторически две ACTIVE у одного игрока), а после
+ *  снятия фильтра «startDate <= kickoff» (ввод задним числом) в выборку
+ *  попадают и старая, и новая заявка — без дедупа игрок мелькал ДВАЖДЫ.
+ *  Правило выбора на персону:
+ *    1) заявка, ПОКРЫВАЮЩАЯ дату матча (startDate <= kickoff) — из них
+ *       самая свежая (поздний startDate);
+ *    2) если ни одна не покрывает — самая свежая (покажется с пометкой
+ *       «заявлен после матча», дата правится из протокола). */
+export function pickBestRegistrationPerPerson<T extends { personId: string; startDate: Date }>(
+  regs: T[],
+  kickoff: Date
+): T[] {
+  const best = new Map<string, T>();
+  for (const r of regs) {
+    const prev = best.get(r.personId);
+    if (!prev) {
+      best.set(r.personId, r);
+      continue;
+    }
+    const covers = r.startDate.getTime() <= kickoff.getTime();
+    const prevCovers = prev.startDate.getTime() <= kickoff.getTime();
+    const better =
+      covers !== prevCovers ? covers : r.startDate.getTime() > prev.startDate.getTime();
+    if (better) best.set(r.personId, r);
+  }
+  return [...best.values()];
+}
+
 /** Список игроков, доступных для протокола, с флагами регистрации/дисквалификации.
  *  Товарищеский матч (без этапа): активные заявки команды в ЛЮБОМ сезоне —
- *  без дисциплинарных флагов (дисквалификации — скоуп турнира). */
+ *  без дисциплинарных флагов (дисквалификации — скоуп турнира).
+ *
+ *  v1.0.46 · ЛУЧШАЯ ПРАКТИКА ВВОДА ЗАДНИМ ЧИСЛОМ: игрок, чья заявка началась
+ *  ПОЗЖЕ даты матча, раньше ПРОСТА ИСЧЕЗАЛ из списка («создал Артемьева —
+ *  его нет в протоколе»). Теперь он ВИДЕН с registrationOk=false — с
+ *  пометкой «заявлен после матча»; дата заявки правится прямо из протокола
+ *  (кнопка у строки / подтверждение при подаче состава). */
 export async function getEligiblePlayers(matchId: string, teamId: string): Promise<EligiblePlayer[]> {
   const match = await db.match.findUnique({
     where: { id: matchId },
@@ -89,48 +133,49 @@ export async function getEligiblePlayers(matchId: string, teamId: string): Promi
   // предзаполнение номеров: последний номер игрока в этой команде
   const lastNumbers = await getLastNumbers(teamId, match.kickoff);
 
+  /** заявка → DTO с флагом покрытия даты матча */
+  const toDTO = (r: { id: string; personId: string; startDate: Date; role: string; number: number | null; person: { lastName: string; firstName: string; position: string | null } }) => ({
+    personId: r.personId,
+    name: `${r.person.lastName} ${r.person.firstName}`,
+    position: r.person.position,
+    number: r.number,
+    regRole: r.role,
+    lastNumber: lastNumbers.get(r.personId) ?? null,
+    registrationOk: r.startDate.getTime() <= match.kickoff.getTime(),
+    registrationId: r.id,
+    registrationStart: r.startDate.toISOString(),
+  });
+
   if (!match.stage) {
-    // товарищеский: последняя активная заявка каждого игрока этой команды
+    // товарищеский: заявки команды в ЛЮБОМ сезоне, покрывшие дату матча
+    // (endDate null/позже матча). Дедуп — одна строка на персону.
     const regs = await db.registration.findMany({
       where: {
         teamId,
-        startDate: { lte: match.kickoff },
         OR: [{ endDate: null }, { endDate: { gte: match.kickoff } }],
       },
       include: { person: true, season: { select: { startDate: true } } },
-      orderBy: { startDate: "desc" },
     });
-    const seen = new Set<string>();
     const result: EligiblePlayer[] = [];
-    for (const r of regs) {
-      if (seen.has(r.personId)) continue;
-      seen.add(r.personId);
-      result.push({
-        personId: r.personId,
-        name: `${r.person.lastName} ${r.person.firstName}`,
-        position: r.person.position,
-        number: r.number,
-        regRole: r.role,
-        lastNumber: lastNumbers.get(r.personId) ?? null,
-        registrationOk: true,
-        suspension: null,
-      });
+    for (const r of pickBestRegistrationPerPerson(regs, match.kickoff)) {
+      result.push({ ...toDTO(r), suspension: null });
     }
     return result.sort((a, b) => a.name.localeCompare(b.name, "ru"));
   }
 
+  // турнирный матч: заявки команды в СЕЗОНЕ этапа — активные (endDate null)
+  // либо закрывшие дату матча; позднее начало помечается registrationOk=false
   const regs = await db.registration.findMany({
     where: {
       teamId,
       seasonId: match.stage.seasonId,
-      startDate: { lte: match.kickoff },
       OR: [{ endDate: null }, { endDate: { gte: match.kickoff } }],
     },
     include: { person: true },
   });
 
   const result: EligiblePlayer[] = [];
-  for (const r of regs) {
+  for (const r of pickBestRegistrationPerPerson(regs, match.kickoff)) {
     const suspension = await db.suspension.findFirst({
       where: { personId: r.personId, seasonId: match.stage.seasonId, isActive: true },
     });
@@ -142,35 +187,33 @@ export async function getEligiblePlayers(matchId: string, teamId: string): Promi
             source: suspension.source,
           }
         : null;
-    result.push({
-      personId: r.personId,
-      name: `${r.person.lastName} ${r.person.firstName}`,
-      position: r.person.position,
-      number: r.number,
-      regRole: r.role,
-      lastNumber: lastNumbers.get(r.personId) ?? null,
-      registrationOk: true,
-      suspension: active,
-    });
+    result.push({ ...toDTO(r), suspension: active });
   }
   return result.sort((a, b) => a.name.localeCompare(b.name, "ru"));
 }
 
 /**
- * Валидация события протокола (PRD + v1.0.19):
+ * Валидация события протокола (PRD + v1.0.19 + v1.0.52):
  * 1) матч не завершён; 2) участник — из ПРОТОКОЛА матча: если состав
  *    подан, автор (и ассистент) обязаны быть в LineupEntry; если состав
  *    ещё не подан — действует fallback-проверка заявки на дату матча;
- * 3) участник не дисквалифицирован (Epic 1, инвариант блокировки).
+ * 3) участник не дисквалифицирован (Epic 1, инвариант блокировки);
+ * 4) v1.0.52 · СОСТОЯНИЕ МАТЧА (когда состав подан):
+ *    • SUBSTITUTION — personId (вышедший) обязан быть ЗАПАСНЫМ, ещё не
+ *      выходившим; assistPersonId (ушедший) — НА ПОЛЕ;
+ *    • прочие события (гол/пенальти/автогол/карточки/VAR) — участник
+ *      обязан быть НА ПОЛЕ (запасной не участвует, пока не вышел заменой).
  *
- * SUBSTITUTION: personId — вышедший на поле (как SUB_IN, состав не
- * обязателен), assistPersonId — ушедший (проверяется по составу).
+ * SUBSTITUTION: personId — вышедший на поле, assistPersonId — ушедший.
+ * Параметр type опционален для совместимости: без него state-правила
+ * применяются как для обычного события (на поле).
  */
 export async function validateEvent(
   matchId: string,
   personId: string,
   teamId: string,
-  assistPersonId?: string | null
+  assistPersonId?: string | null,
+  type?: string | null
 ) {
   const match = await db.match.findUnique({
     where: { id: matchId },
@@ -201,6 +244,7 @@ export async function validateEvent(
         throw new HttpError(409, "Автор ассиста не внесён в протокол матча (состав уже подан). Добавьте игрока в состав на вкладке «Составы».");
       }
     }
+    await assertMatchStateRules(matchId, teamId, personId, assistPersonId ?? null, type ?? null);
     return match;
   }
   const seasonId = match.stage.seasonId;
@@ -227,7 +271,89 @@ export async function validateEvent(
     await checkMembership(assistPersonId, "Автор ассиста");
   }
 
+  await assertMatchStateRules(matchId, teamId, personId, assistPersonId ?? null, type ?? null);
+
   return match;
+}
+
+/** v1.0.52 · Правила состояния матча: кто на поле / кто может выйти.
+ *  Применяются ТОЛЬКО когда состав подан (иначе state неизвестен —
+ *  работает fallback заявки). Ошибки — с именем игрока и причиной. */
+async function assertMatchStateRules(
+  matchId: string,
+  teamId: string,
+  personId: string,
+  assistPersonId: string | null,
+  type: string | null
+) {
+  const lineupRows = await db.lineupEntry.findMany({
+    where: { matchId, teamId },
+    select: { personId: true, isStarter: true },
+  });
+  if (lineupRows.length === 0) return; // состав не подан — легаси-fallback
+
+  const subEvents = await db.matchEvent.findMany({
+    where: { matchId, teamId, type: { in: ["SUBSTITUTION", "SUB_IN", "SUB_OUT"] } },
+    select: { type: true, personId: true, assistPersonId: true },
+  });
+  const state = computeMatchState(lineupRows, subEvents);
+
+  // имена для понятных ошибок (одним запросом на всех участников)
+  const ids = [personId, ...(assistPersonId ? [assistPersonId] : [])];
+  const persons = await db.person.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, lastName: true, firstName: true },
+  });
+  const nameOf = (pid: string) => {
+    const p = persons.find((x) => x.id === pid);
+    return p ? `${p.lastName} ${p.firstName}`.trim() : "Игрок";
+  };
+
+  if (type === "SUBSTITUTION") {
+    // вышедший (personId) — только запасной, ещё не выходивший
+    if (state.onField.has(personId)) {
+      throw new HttpError(409, `${nameOf(personId)} уже на поле — он не может выйти на замену. Замена: «Выходит на поле» — запасной, «Уходит» — игрок на поле.`);
+    }
+    if (!state.bench.has(personId)) {
+      // не на поле, но и не в скамейке: уже выходил (и ушёл) — или не запас
+      const inProtocol = lineupRows.some((l) => l.personId === personId);
+      const reason = state.usedInSub.has(personId)
+        ? "уже выходил на поле и покинул его — повторный выход запрещён"
+        : inProtocol
+          ? "не числится в запасе (стартовый состав)"
+          : "не внесён в протокол матча";
+      throw new HttpError(409, `${nameOf(personId)} не может выйти на замену: ${reason}.`);
+    }
+    // ушедший (assistPersonId) — только игрок на поле
+    if (assistPersonId) {
+      if (!state.onField.has(assistPersonId)) {
+        const reason = state.usedInSub.has(assistPersonId)
+          ? "уже покинул поле заменой и не может уйти повторно"
+          : "не на поле (запасные не уходят — они входят)";
+        throw new HttpError(409, `${nameOf(assistPersonId)} не может уйти с поля: ${reason}.`);
+      }
+    }
+    return;
+  }
+
+  // прочие события: участник (и ассистент) — только НА ПОЛЕ
+  const label = type === "GOAL" || type === "PENALTY" ? "Автор гола" : "Игрок";
+  if (!state.onField.has(personId)) {
+    const reason = state.bench.has(personId)
+      ? "запасной — участвует только выйдя на замену"
+      : state.usedInSub.has(personId)
+        ? "уже покинул поле заменой"
+        : "не на поле";
+    throw new HttpError(409, `${label} ${nameOf(personId)} — ${reason}. Гол/карточка записывается только игроку на поле; запасной выходит через событие «Замена».`);
+  }
+  if (assistPersonId && !state.onField.has(assistPersonId)) {
+    const reason = state.bench.has(assistPersonId)
+      ? "запасной — участвует только выйдя на замену"
+      : state.usedInSub.has(assistPersonId)
+        ? "уже покинул поле заменой"
+        : "не на поле";
+    throw new HttpError(409, `Автор ассиста ${nameOf(assistPersonId)} — ${reason}.`);
+  }
 }
 
 // ---------- Счёт ----------

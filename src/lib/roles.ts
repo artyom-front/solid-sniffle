@@ -58,6 +58,7 @@ export const SYSTEM_ROLES: RoleDef[] = [
   { code: "PRESS_OFFICER", name: "Пресс-атташе", group: "team" },
   { code: "PRESIDENT", name: "Президент / председатель", group: "team" },
   { code: "GENERAL_MANAGER", name: "Генеральный менеджер", group: "team" },
+  { code: "DIRECTOR", name: "Директор", group: "team" },
   { code: "ADMINISTRATOR", name: "Администратор", group: "team" },
   { code: "MASSEUR", name: "Массажист", group: "team" },
   // — судейский корпус: ОДНА роль на карточке, должность — в матче —
@@ -97,6 +98,7 @@ export const REGISTRATION_ROLES: { code: string; name: string }[] = [
   { code: "GOALKEEPER_COACH", name: "Тренер вратарей" },
   { code: "FITNESS_COACH", name: "Тренер по физподготовке" },
   { code: "ADMINISTRATOR", name: "Администратор" },
+  { code: "DIRECTOR", name: "Директор" },
   { code: "PRESS_OFFICER", name: "Пресс-атташе" },
   { code: "MASSEUR", name: "Массажист" },
   { code: "PRESIDENT", name: "Президент / председатель" },

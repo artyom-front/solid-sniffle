@@ -172,7 +172,7 @@ export function StatBlocksPanel({ bump, onReload, version = 0 }: CrudProps) {
           {form && (
             <div className="space-y-3">
               <StatBlockPreview form={form} />
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <Field label="Заголовок" hint="«Бомбардир тура», «Клуб недели»"><Input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Бомбардир тура" /></Field>
                 <Field label="Цифра" hint="Крупно: «12», «+7»"><Input value={form.value} onChange={(e) => setForm({ ...form, value: e.target.value })} placeholder="12" /></Field>
                 <Field label="Подпись" hint="Рядом с цифрой или вместо неё"><Input value={form.text} onChange={(e) => setForm({ ...form, text: e.target.value })} placeholder="голов · Иванов («Заря»)" /></Field>
@@ -182,7 +182,7 @@ export function StatBlocksPanel({ bump, onReload, version = 0 }: CrudProps) {
                   <Switch checked={form.isActive} onCheckedChange={(v) => setForm({ ...form, isActive: v })} />
                   <span className="text-sm text-zinc-600">Активна</span>
                 </div>
-                <div className="col-span-2">
+                <div className="sm:col-span-2">
                   <MediaUpload
                     value={form.imageUrl}
                     onChange={(url) => setForm((f) => (f ? { ...f, imageUrl: url } : f))}
@@ -333,7 +333,7 @@ export function FormatsPanel({ bump, onReload, version = 0 }: CrudProps) {
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>{form?.id ? "Редактировать формат" : "Новый вид футбола"}</DialogTitle></DialogHeader>
           {form && (
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <Field label="Код" hint="Как у лиг: F11, F8, FUTSAL, F7, LFL_8">
                 <Input
                   value={form.code}

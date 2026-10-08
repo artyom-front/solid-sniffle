@@ -41,7 +41,16 @@ export function useFetch<T>(url: string | null, version = 0, initial?: T | null)
   return { data, loading, error, reload: load };
 }
 
-/** POST/PATCH JSON-запрос; возвращает { ok, data | error } */
+/** POST/PATCH/DELETE JSON-запрос; возвращает { ok, data | error }.
+ *
+ * v1.0.52 · ТЕЛО ОТВЕТА ПРИ ОШИБКЕ (баг «не получается создать игрока
+ * с одинаковыми ФИО»): раньше при !r.ok возвращался ТОЛЬКО текст error —
+ * структурированное тело 409 (duplicates у персон, code/dependencies у
+ * умного удаления) ВЫБРАСЫВАЛОСЬ. Панель дублей с кнопкой «Это другой
+ * человек — создать всё равно» и блок-диалог SmartDelete молча не
+ * работали: админ видел голую ошибку без пути решения. Теперь error-тело
+ * пробрасывается в data (оно сознательно не бросается в исключение —
+ * вызывающий код решает по res.data, ошибка ли это или структура 409). */
 export async function apiPost<T = unknown>(url: string, body: unknown, method = "POST"): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
     const r = await fetch(url, {
@@ -50,7 +59,7 @@ export async function apiPost<T = unknown>(url: string, body: unknown, method = 
       body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, error: j?.error || `Ошибка ${r.status}` };
+    if (!r.ok) return { ok: false, data: (j ?? {}) as T, error: j?.error || `Ошибка ${r.status}` };
     return { ok: true, data: j as T };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Сетевая ошибка" };

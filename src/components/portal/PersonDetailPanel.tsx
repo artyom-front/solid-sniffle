@@ -65,7 +65,7 @@ interface Props {
 const ROLE_OPTIONS: Record<string, string> = {
   PLAYER: "Игрок", COACH: "Тренер", ASSISTANT_COACH: "Помощник тренера",
   GOALKEEPER_COACH: "Тренер вратарей", FITNESS_COACH: "Тренер по физподготовке",
-  ADMINISTRATOR: "Администратор", DELEGATE: "Делегат", DOCTOR: "Врач", MASSEUR: "Массажист",
+  ADMINISTRATOR: "Администратор", DIRECTOR: "Директор", DELEGATE: "Делегат", DOCTOR: "Врач", MASSEUR: "Массажист",
 };
 const regRoleLabel = (code: string) => ROLE_OPTIONS[code] ?? code;
 
@@ -171,7 +171,7 @@ export default function PersonDetailPanel({ personId, version, bump, onBack, bac
       {/* ---- Шапка-профиль ---- */}
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="flex flex-wrap items-start gap-4 p-4">
-          <MediaUpload value={person.photoUrl ?? ""} onChange={savePhoto} label="" hint="" round className="w-fit" previewAlt="Фото персоны" />
+          <MediaUpload value={person.photoUrl ?? ""} onChange={savePhoto} label="Фото" hint="Квадрат от 300×300" round className="w-fit" previewAlt="Фото персоны" />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-black tracking-tight text-zinc-900">{fullName}</h2>
@@ -220,7 +220,7 @@ export default function PersonDetailPanel({ personId, version, bump, onBack, bac
           <h3 className="flex items-center gap-1.5 text-sm font-bold text-zinc-700">
             <User className="h-4 w-4 text-emerald-600" /> Профиль
           </h3>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <Field label="Фамилия"><Input value={form.lastName} onChange={(e) => setEdits({ ...edits, lastName: e.target.value })} /></Field>
             <Field label="Имя"><Input value={form.firstName} onChange={(e) => setEdits({ ...edits, firstName: e.target.value })} /></Field>
             <Field label="Отчество"><Input value={form.middleName} onChange={(e) => setEdits({ ...edits, middleName: e.target.value })} /></Field>

@@ -20,7 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   ArrowLeft, ChevronRight, ExternalLink, Trash2, Pencil, UserPlus, FileSpreadsheet,
-  Loader2, CheckCircle2, AlertTriangle, Users, CalendarDays, LogIn, LogOut,
+  Loader2, CheckCircle2, Users, CalendarDays, LogIn, LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiPost, useFetch, fmtShortDate } from "./hooks";
@@ -33,6 +33,7 @@ import { readFileTextSmart } from "@/lib/csvEncoding";
 import { templateText } from "@/lib/importTemplates";
 import type { OverviewDTO } from "./types";
 import { REGISTRATION_ROLE_OPTIONS as ROLE_OPTIONS } from "@/lib/registration-roles"; // v1.0.44: единый справочник с API
+import { PersonFields, PersonDupesNotice, emptyPersonForm, type PersonFormValue, type CustomRoleDTO, type PersonDuplicate } from "./PersonFields"; // v1.0.52: единая форма создания
 const roleLabel = (code: string) => ROLE_OPTIONS.find((r) => r.code === code)?.name ?? code;
 
 interface RegRow {
@@ -177,7 +178,7 @@ export default function TeamDetailPanel({ teamId, version, bump, onBack, onOpenP
       {/* ---- Шапка-профиль ---- */}
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="flex flex-wrap items-start gap-4 p-4">
-          <MediaUpload value={team.logoUrl ?? ""} onChange={saveLogo} label="" hint="" className="w-fit" previewAlt="Эмблема команды" />
+          <MediaUpload value={team.logoUrl ?? ""} onChange={saveLogo} label="Эмблема" hint="Квадрат от 200×200" className="w-fit" previewAlt="Эмблема команды" />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-black tracking-tight text-zinc-900">{team.name}</h2>
@@ -410,6 +411,8 @@ export default function TeamDetailPanel({ teamId, version, bump, onBack, onOpenP
 function EditRegForm({ reg, onDone }: { reg: RegRow; onDone: () => void }) {
   const [number, setNumber] = useState(reg.number != null ? String(reg.number) : "");
   const [role, setRole] = useState(reg.role);
+  // v1.0.46 · дата начала заявки — редактируемая (баг пост-фактум протоколов)
+  const [startDate, setStartDate] = useState(reg.startDate.slice(0, 10));
   const [busy, setBusy] = useState(false);
 
   const save = async () => {
@@ -417,6 +420,7 @@ function EditRegForm({ reg, onDone }: { reg: RegRow; onDone: () => void }) {
     const res = await apiPost(`/api/admin/registrations/${reg.id}`, {
       number: number.trim() === "" ? null : Number(number),
       role,
+      startDate,
     }, "PATCH");
     setBusy(false);
     if (!res.ok) return toast.error(res.error);
@@ -432,6 +436,9 @@ function EditRegForm({ reg, onDone }: { reg: RegRow; onDone: () => void }) {
           {ROLE_OPTIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
         </select>
       </Field>
+      <Field label="Дата начала заявки" hint="игрок должен быть заявлен на дату матча — для прошедших матчей ставьте дату не позже матча">
+        <Input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+      </Field>
       <DialogFooter>
         <Button variant="outline" onClick={onDone}>Отмена</Button>
         <Button disabled={busy} onClick={save} className="bg-emerald-600 hover:bg-emerald-700">Сохранить</Button>
@@ -441,7 +448,10 @@ function EditRegForm({ reg, onDone }: { reg: RegRow; onDone: () => void }) {
 }
 
 // ============================================================
-// Добавление игрока: найти существующего или создать нового
+// Добавление в заявку: найти существующего или создать нового.
+// v1.0.52 · ЕДИНАЯ ФОРМА СОЗДАНИЯ: вкладка «Создать нового» использует
+// PersonFields — ТОТ ЖЕ блок полей, что и панель «Люди» (один процесс
+// создания персоны, один API, одинаковые подсказки и антидубли).
 // ============================================================
 interface PersonLite { id: string; name: string; birthDate: string | null; position: string | null; isReferee: boolean; teams: string[] }
 
@@ -453,25 +463,30 @@ function AddPlayerDialog({ open, onClose, teamId, seasonId, seasonLabel, version
   const [personId, setPersonId] = useState("");
   const [number, setNumber] = useState("");
   const [role, setRole] = useState("PLAYER");
+  const [regDate, setRegDate] = useState("");
   const [busy, setBusy] = useState(false);
-  // форма создания нового
-  const [np, setNp] = useState({ lastName: "", firstName: "", middleName: "", birthDate: "", position: "" });
-  const [dupes, setDupes] = useState<{ id: string; name: string; birthDate: string | null }[] | null>(null);
+  // v1.0.52 · полная форма персоны (единая с панелью «Люди»)
+  const [np, setNp] = useState<PersonFormValue>(emptyPersonForm());
+  const [dupes, setDupes] = useState<PersonDuplicate[] | null>(null);
 
   const { data } = useFetch<{ persons: PersonLite[] }>(open && mode === "find" && q.trim().length >= 2 ? `/api/admin/persons?q=${encodeURIComponent(q.trim())}` : null, version);
+  const { data: customRolesData } = useFetch<{ customRoles: CustomRoleDTO[] }>(open ? "/api/admin/customroles" : null, version);
+  const customRoles = customRolesData?.customRoles ?? [];
   const found = (data?.persons ?? []).slice(0, 12);
   const selected = found.find((p) => p.id === personId);
 
   const register = async (pid: string) => {
-    setBusy(true);
     const res = await apiPost<{ registration: unknown }>("/api/admin/registrations", {
       personId: pid, teamId, seasonId, role,
       number: number.trim() === "" ? null : Number(number),
+      // v1.0.46: дата заявки — по умолчанию сегодня; для задним числом
+      // вводимых протоколов можно датировать раньше (например, началом сезона)
+      startDate: regDate || undefined,
       endDatePrevious: new Date().toISOString(),
     });
-    setBusy(false);
-    if (!res.ok) return toast.error(res.error, { duration: 7000 });
+    if (!res.ok) { setBusy(false); return toast.error(res.error, { duration: 7000 }); }
     toast.success("Игрок заявлен");
+    setBusy(false);
     reset();
     onAdded();
   };
@@ -479,31 +494,58 @@ function AddPlayerDialog({ open, onClose, teamId, seasonId, seasonLabel, version
   const createAndRegister = async (force = false) => {
     if (!np.lastName.trim() || !np.firstName.trim()) return toast.error("Укажите фамилию и имя");
     setBusy(true);
-    const res = await apiPost<{ person: { id: string }; duplicates?: { id: string; name: string; birthDate: string | null }[] }>("/api/admin/persons", {
+    // те же поля, что в панели «Люди» (единый процесс создания)
+    const res = await apiPost<{ person: { id: string }; duplicates?: PersonDuplicate[] }>("/api/admin/persons", {
       lastName: np.lastName, firstName: np.firstName, middleName: np.middleName || null,
       birthDate: np.birthDate || null, position: np.position || null,
-      roles: ["PLAYER"], force,
+      gender: np.gender || null, photoUrl: np.photoUrl || null,
+      roles: np.roles.length ? np.roles : ["PLAYER"], force,
     });
     if (!res.ok) {
       setBusy(false);
+      // 409 — точное совпадение ФИО+ДР: v1.0.52 res.data при ошибке
+      // доезжает — панель с кнопкой «создать и заявить» реально показывается
       if (res.data?.duplicates) {
         setDupes(res.data.duplicates);
-        return toast.error("Похожая персона уже есть — проверьте список ниже");
+        return toast.error("Точно такая же персона уже есть — проверьте список ниже");
       }
       return toast.error(res.error);
     }
     const pid = res.data?.person?.id;
     setDupes(null);
     if (!pid) { setBusy(false); return; }
+    // v1.0.52 · advisory: тёзки создаются свободно — мягкое напоминание
+    if (res.data?.duplicates?.length) {
+      toast.info(
+        `В базе уже есть человек с таким же ФИО (${res.data.duplicates.map((d) => d.name).join(", ")}). Если это дубль — объедините профили в «Merge профилей».`,
+        { duration: 8000 }
+      );
+    }
     await register(pid);
     setBusy(false);
   };
 
   const reset = () => {
-    setQ(""); setPersonId(""); setNumber(""); setRole("PLAYER");
-    setNp({ lastName: "", firstName: "", middleName: "", birthDate: "", position: "" });
+    setQ(""); setPersonId(""); setNumber(""); setRole("PLAYER"); setRegDate("");
+    setNp(emptyPersonForm());
     setDupes(null);
   };
+
+  // v1.0.52 · ЕДИНЫЙ БЛОК ПОЛЕЙ ЗАЯВКИ (оба режима диалога): номер,
+  // роль в заявке, дата заявки — одни и те же контролы и подсказки
+  const regFields = (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <Field label="Номер"><Input type="number" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="10" /></Field>
+      <Field label="Роль в заявке">
+        <select value={role} onChange={(e) => setRole(e.target.value)} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
+          {ROLE_OPTIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
+        </select>
+      </Field>
+      <Field label="Дата заявки" hint="по умолчанию сегодня; для прошедших матчей — раньше">
+        <Input type="date" value={regDate} onChange={(e) => setRegDate(e.target.value)} />
+      </Field>
+    </div>
+  );
 
   return (
     <Dialog open={open} onOpenChange={(o) => { if (!o) { onClose(); reset(); } }}>
@@ -551,15 +593,8 @@ function AddPlayerDialog({ open, onClose, teamId, seasonId, seasonLabel, version
                 матчи этого чемпионата и сезона (проверяется автоматически).
               </p>
             )}
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Номер"><Input type="number" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="10" /></Field>
-              <Field label="Роль в заявке">
-                <select value={role} onChange={(e) => setRole(e.target.value)} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
-                  {ROLE_OPTIONS.map((r) => <option key={r.code} value={r.code}>{r.name}</option>)}
-                </select>
-              </Field>
-            </div>
-            <Button className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={!personId || busy} onClick={() => register(personId)}>
+            {regFields}
+            <Button className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={!personId || busy} onClick={() => { setBusy(true); void register(personId); }}>
               {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <UserPlus className="mr-1 h-4 w-4" />}
               Заявить {selected ? selected.name.split(" ")[0] : ""}
             </Button>
@@ -568,40 +603,28 @@ function AddPlayerDialog({ open, onClose, teamId, seasonId, seasonLabel, version
 
         {mode === "create" && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Фамилия"><Input value={np.lastName} onChange={(e) => setNp({ ...np, lastName: e.target.value })} /></Field>
-              <Field label="Имя"><Input value={np.firstName} onChange={(e) => setNp({ ...np, firstName: e.target.value })} /></Field>
-              <Field label="Отчество"><Input value={np.middleName} onChange={(e) => setNp({ ...np, middleName: e.target.value })} /></Field>
-              <Field label="Дата рождения" hint="Защита от дублей"><Input type="date" value={np.birthDate} onChange={(e) => setNp({ ...np, birthDate: e.target.value })} /></Field>
-              <Field label="Позиция">
-                <select value={np.position} onChange={(e) => setNp({ ...np, position: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
-                  <option value="">— не указана —</option>
-                  <option value="GK">Вратарь</option>
-                  <option value="DF">Защитник</option>
-                  <option value="MF">Полузащитник</option>
-                  <option value="FW">Нападающий</option>
-                </select>
-              </Field>
-              <Field label="Номер"><Input type="number" value={number} onChange={(e) => setNumber(e.target.value)} placeholder="10" /></Field>
-            </div>
+            {/* v1.0.52 · ЕДИНАЯ ФОРМА ПЕРСОНЫ — как в панели «Люди»:
+                один знакомый интерфейс создания, одинаковые поля и подсказки */}
+            <PersonFields value={np} onChange={setNp} customRoles={customRoles} withPhoto={false} />
+            {regFields}
+            <PersonDupesNotice
+              dupes={dupes ?? []}
+              busy={busy}
+              onForce={() => createAndRegister(true)}
+              forceLabel="Это другой человек — создать и заявить"
+            />
             {dupes && dupes.length > 0 && (
-              <div className="space-y-2 rounded-lg border border-amber-300 bg-amber-50 p-3">
-                <p className="flex items-center gap-1.5 text-xs font-bold text-amber-800"><AlertTriangle className="h-3.5 w-3.5" /> Похоже, этот человек уже есть:</p>
-                {dupes.map((d) => <p key={d.id} className="text-xs text-amber-700">{d.name}{d.birthDate ? ` · ${d.birthDate}` : ""}</p>)}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button size="sm" variant="outline" className="h-7 border-amber-300 bg-white text-xs text-amber-800" disabled={busy} onClick={() => createAndRegister(true)}>
-                    Это другой человек — создать и заявить
-                  </Button>
-                  <p className="text-[11px] text-amber-600">
-                    Нет точных данных (только имя-фамилия)? Создавайте смело: если позже окажется дубль —
-                    профили объединяются в разделе «Merge профилей».
-                  </p>
-                </div>
-              </div>
+              <p className="text-[11px] text-amber-600">
+                Нет точных данных (только имя-фамилия)? Создавайте смело: если позже окажется дубль —
+                профили объединяются в разделе «Merge профилей».
+              </p>
             )}
             <Button className="w-full bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={() => createAndRegister(false)}>
               {busy ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : null} Создать персону и заявить
             </Button>
+            <p className="text-xs text-zinc-400">
+              Тот же бланк, что в разделе «Люди»: после создания карточку можно дополнить фото и деталями.
+            </p>
           </div>
         )}
       </DialogContent>

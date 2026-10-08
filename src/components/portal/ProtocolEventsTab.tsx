@@ -5,6 +5,9 @@
 // протокола (выделена из ProtocolEditor в v1.0.30).
 //  • форма события: команда, тип, минута (45+X), игроки;
 //  • замена = ОДНО событие с двумя игроками (▲ вышел / ▼ ушёл);
+//  • v1.0.52: состояние матча (lib/engine/match-state) — в замене
+//    «Выходит» предлагаются ТОЛЬКО запасные, «Уходит» — только игроки
+//    на поле; во всех прочих событиях — только игроки НА ПОЛЕ;
 //  • валидация на лету: дисквалификация, ассист=автор, дубль замены;
 //  • хронология-ось (MatchTimeline) с удалением событий.
 // ============================================================
@@ -21,6 +24,7 @@ import { EVENT_LABELS } from "./types";
 import { BallIcon } from "./EventIcons";
 import MatchTimeline from "./MatchTimeline";
 import { EVENT_TYPES, isProtocolLocked, type ProtocolTabProps } from "./protocol-shared";
+import { computeMatchState, type MatchState } from "@/lib/engine/match-state";
 
 export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolTabProps) {
   const m = data.match;
@@ -38,26 +42,40 @@ export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolT
   const evTeam = evTeamRaw || m.homeTeam.id || "";
   const isLocked = isProtocolLocked(m.status);
 
-  // игроки «на поле»: СТАРТОВЫЕ из протокола − заменённые + вышедшие
-  // (запасные попадают на поле только через событие замены)
-  const onField = useMemo(() => {
-    const map = new Map<string, string>(); // personId -> name
-    const nameOf = (pid: string) => [...data.eligible.home, ...data.eligible.away].find((x) => x.personId === pid)?.name;
-    for (const l of data.lineup) {
-      if (!l.isStarter) continue; // старт — только выходившие с первых минут
-      const name = nameOf(l.personId);
-      if (name) map.set(l.personId, name);
-    }
-    for (const e of data.events) {
-      if (e.type === "SUB_OUT") map.delete(e.person.id);
-      if (e.type === "SUB_IN") map.set(e.person.id, e.person.name);
-      if (e.type === "SUBSTITUTION") {
-        map.set(e.person.id, e.person.name);        // вышел
-        if (e.assist) map.delete(e.assist.id);       // ушёл
-      }
+  // v1.0.52 · СОСТОЯНИЕ МАТЧА ПО КАЖДОЙ КОМАНДЕ (одна логика с сервером —
+  // lib/engine/match-state): НА ПОЛЕ = старт + вышедшие заменой − ушедшие;
+  // СКАМЕЙКА = запас из протокола, ещё не выходивший. Правила:
+  //   • замена: «Выходит» — ТОЛЬКО со скамейки, «Уходит» — ТОЛЬКО с поля;
+  //   • прочие события (голы/карточки/VAR) — ТОЛЬКО игроки НА ПОЛЕ
+  //     (запасной не участвует, пока не вышел заменой).
+  const stateByTeam = useMemo(() => {
+    const map = new Map<string, MatchState>();
+    for (const team of [m.homeTeam, m.awayTeam]) {
+      const lineup = data.lineup
+        .filter((l) => l.teamId === team.id)
+        .map((l) => ({ personId: l.personId, isStarter: l.isStarter }));
+      const events = data.events
+        .filter((e) => e.teamId === team.id)
+        .map((e) => ({ type: e.type, personId: e.person.id, assistPersonId: e.assist?.id ?? null }));
+      map.set(team.id, computeMatchState(lineup, events));
     }
     return map;
-  }, [data]);
+  }, [data, m.homeTeam, m.awayTeam]);
+
+  // кандидаты события для выбранной команды, с учётом состояния матча
+  const teamState = stateByTeam.get(evTeam);
+  const teamEligible = evTeam === m.homeTeam.id ? data.eligible.home : data.eligible.away;
+  /** игроки НА ПОЛЕ выбранной команды (для всех событий, кроме замены) */
+  const onFieldPlayers = useMemo(
+    () => (teamState ? teamEligible.filter((p) => teamState.onField.has(p.personId)) : teamEligible),
+    [teamState, teamEligible]
+  );
+  /** СКАМЕЙКА выбранной команды (кто может ВЫЙТИ заменой) */
+  const benchPlayers = useMemo(
+    () => (teamState ? teamEligible.filter((p) => teamState.bench.has(p.personId)) : teamEligible),
+    [teamState, teamEligible]
+  );
+  const lineupSubmitted = !!teamState?.hasLineup;
 
   async function addEvent() {
     const minute = Number(evMinute);
@@ -76,6 +94,29 @@ export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolT
     if (evType === "SUBSTITUTION" && !evAssist) {
       toast.error("Замена требует двух игроков: укажите, кто уходит с поля");
       return;
+    }
+    // v1.0.52 · мгновенная проверка состояния матча (состав мог измениться
+    // после выбора — сервер всё равно проверит, но фронт скажет раньше)
+    if (lineupSubmitted) {
+      if (evType === "SUBSTITUTION") {
+        if (!benchPlayers.some((p) => p.personId === evPerson)) {
+          toast.error("Вышедший должен быть ЗАПАСНЫМ, ещё не выходившим. Обновите список — состав/замены уже изменились.");
+          return;
+        }
+        if (!onFieldPlayers.some((p) => p.personId === evAssist)) {
+          toast.error("Уходить может только игрок НА ПОЛЕ");
+          return;
+        }
+      } else {
+        if (!onFieldPlayers.some((p) => p.personId === evPerson)) {
+          toast.error("Игрок не на поле — запасные участвуют только через замену");
+          return;
+        }
+        if (evAssist && !onFieldPlayers.some((p) => p.personId === evAssist)) {
+          toast.error("Ассистент не на поле — запасные участвуют только через замену");
+          return;
+        }
+      }
     }
     // Валидация на лету (PRD §6): предупреждение до отправки
     const player = [...data.eligible.home, ...data.eligible.away].find((p) => p.personId === evPerson);
@@ -160,50 +201,44 @@ export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolT
               <div className="space-y-1">
                 <Label className="text-xs">
                   {evType === "SUBSTITUTION"
-                    ? <span className="text-emerald-700">▲ Выходит на поле</span>
+                    ? <span className="text-emerald-700">▲ Выходит на поле (запас)</span>
                     : evType === "GOAL" || evType === "PENALTY"
                       ? "Автор (на поле)"
-                      : "Игрок"}
+                      : "Игрок (на поле)"}
                 </Label>
                 <Select value={evPerson} onValueChange={setEvPerson}>
                   <SelectTrigger className="bg-white"><SelectValue placeholder="Выбрать" /></SelectTrigger>
                   <SelectContent>
-                    {evTeam && (evType === "GOAL" || evType === "PENALTY"
-                      ? [...onField.entries()].filter(([pid]) => {
-                          const team = evTeam === m.homeTeam.id ? data.eligible.home : data.eligible.away;
-                          return team.some((p) => p.personId === pid);
-                        })
-                      : (evTeam === m.homeTeam.id ? data.eligible.home : data.eligible.away)
-                    ).map((entry) => {
-                      const pid = Array.isArray(entry) ? entry[0] : entry.personId;
-                      const name = Array.isArray(entry) ? entry[1] : entry.name;
-                      const suspended = Array.isArray(entry) ? false : !!entry.suspension;
-                      return (
-                        <SelectItem key={pid} value={pid} disabled={suspended}>
-                          {name}{suspended ? " — ДИСКВАЛИФИЦИРОВАН" : ""}
-                        </SelectItem>
-                      );
-                    })}
+                    {/* v1.0.52: замена — только запасные со скамейки;
+                        прочие события — только игроки на поле */}
+                    {(evType === "SUBSTITUTION" ? benchPlayers : onFieldPlayers).length === 0 && (
+                      <div className="px-2 py-1.5 text-xs text-zinc-400">
+                        {lineupSubmitted
+                          ? evType === "SUBSTITUTION"
+                            ? "Нет доступных запасных: состав не подан с запасом, либо все уже на поле"
+                            : "На поле никого — проверьте вкладку «Составы»"
+                          : "Состав не подан — доступны все заявленные игроки"}
+                      </div>
+                    )}
+                    {(evType === "SUBSTITUTION" ? benchPlayers : onFieldPlayers).map((p) => (
+                      <SelectItem key={p.personId} value={p.personId} disabled={!!p.suspension}>
+                        {p.name}{p.suspension ? " — ДИСКВАЛИФИЦИРОВАН" : ""}
+                      </SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
 
-              {/* второй участник: ассист или уходящий игрок */}
+              {/* второй участник: ассист или уходящий игрок (v1.0.52 — только с поля) */}
               {(evType === "GOAL" || evType === "PENALTY") && (
                 <div className="space-y-1">
-                  <Label className="text-xs">Ассист (необяз., в скобках)</Label>
+                  <Label className="text-xs">Ассист (необяз., на поле)</Label>
                   <Select value={evAssist} onValueChange={setEvAssist}>
                     <SelectTrigger className="bg-white"><SelectValue placeholder="—" /></SelectTrigger>
                     <SelectContent>
-                      {[...onField.entries()]
-                        .filter(([pid]) => pid !== evPerson)
-                        .filter(([pid]) => {
-                          const team = evTeam === m.homeTeam.id ? data.eligible.home : data.eligible.away;
-                          return team.some((p) => p.personId === pid);
-                        })
-                        .map(([pid, name]) => (
-                          <SelectItem key={pid} value={pid}>{name}</SelectItem>
-                        ))}
+                      {onFieldPlayers.filter((p) => p.personId !== evPerson).map((p) => (
+                        <SelectItem key={p.personId} value={p.personId}>{p.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -214,15 +249,9 @@ export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolT
                   <Select value={evAssist} onValueChange={setEvAssist}>
                     <SelectTrigger className="bg-white"><SelectValue placeholder="Кто покидает поле" /></SelectTrigger>
                     <SelectContent>
-                      {[...onField.entries()]
-                        .filter(([pid]) => pid !== evPerson)
-                        .filter(([pid]) => {
-                          const team = evTeam === m.homeTeam.id ? data.eligible.home : data.eligible.away;
-                          return team.some((p) => p.personId === pid);
-                        })
-                        .map(([pid, name]) => (
-                          <SelectItem key={pid} value={pid}>{name}</SelectItem>
-                        ))}
+                      {onFieldPlayers.filter((p) => p.personId !== evPerson).map((p) => (
+                        <SelectItem key={p.personId} value={p.personId}>{p.name}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -231,16 +260,16 @@ export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolT
 
             {evType === "SUBSTITUTION" && (
               <p className="rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-700">
-                Замена записывается <b>одной строкой протокола</b>: ▲ вышедший — главный игрок события, ▼ ушедший — второй.
-                В хронологии отобразится «▼ Иванов → ▲ Петров».
+                Замена записывается <b>одной строкой протокола</b>: ▲ вышедший — со скамейки запасных,
+                ▼ ушедший — игрок на поле. В хронологии отобразится «▼ Иванов → ▲ Петров».
               </p>
             )}
             <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" disabled={busy} onClick={addEvent}>
               Добавить событие
             </Button>
             <p className="text-xs text-zinc-400">
-              Гол засчитывается команде события; автогол — сопернику. Участвовать могут только игроки из протокола (вкладка «Составы»).
-              «+X» — добавленное время (45+3).
+              Участвуют только игроки НА ПОЛЕ (состав — вкладка «Составы»): голы, карточки и VAR записываются
+              игрокам на поле; запасной попадает туда только через событие «Замена». «+X» — добавленное время (45+3).
             </p>
           </CardContent>
         </Card>

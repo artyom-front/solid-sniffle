@@ -21,6 +21,7 @@ export const REGISTRATION_ROLE_OPTIONS = [
   { code: "GOALKEEPER_COACH", name: "Тренер вратарей" },
   { code: "FITNESS_COACH", name: "Тренер по физподготовке" },
   { code: "ADMINISTRATOR", name: "Администратор" },
+  { code: "DIRECTOR", name: "Директор" },
   { code: "DELEGATE", name: "Делегат" },
   { code: "DOCTOR", name: "Врач" },
   { code: "MASSEUR", name: "Массажист" },
