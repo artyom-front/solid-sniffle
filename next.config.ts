@@ -1,4 +1,9 @@
+import fs from "node:fs";
 import type { NextConfig } from "next";
+
+// HEALTH VERSION: /api/health отдаёт версию из package.json (APP_VERSION),
+// а не хардкод "1.0.0" из route.ts. Читаем один раз при старте конфига.
+const pkg = JSON.parse(fs.readFileSync("package.json", "utf8")) as { version: string };
 
 // Умеренная CSP: Next.js требует inline-скрипты для гидратации (без nonce).
 // Внешние скрипты запрещены полностью — XSS-инъекции не исполняются.
@@ -17,6 +22,10 @@ const CSP = [
 ].join("; ");
 
 const nextConfig: NextConfig = {
+  // /api/health: version из package.json (см. src/app/api/health/route.ts)
+  env: {
+    APP_VERSION: pkg.version,
+  },
   // standalone-сборка для деплоя: .next/standalone/server.js + минимальные зависимости
   output: "standalone",
   poweredByHeader: false,
