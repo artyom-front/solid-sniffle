@@ -12,6 +12,7 @@ import type { MatchDTO } from "./types";
 import { FORMAT_LABELS } from "@/lib/labels";
 import { LoadingBlock, EmptyState, FormBadges, matchScore, StreakMark } from "./ui-bits";
 import { Avatar, Breadcrumbs, Crest, StatTile } from "./visuals";
+import { Lightbox } from "./Lightbox";
 import { BallIcon } from "./EventIcons";
 
 interface TeamDetail {
@@ -45,6 +46,9 @@ const POS_GROUPS: { id: string; title: string }[] = [
 export default function TeamPage({ teamId, version = 0, initial }: { teamId: string; version?: number; initial?: TeamDetail | null }) {
   const { data, error } = useFetch<TeamDetail>(`/api/public/teams/${teamId}`, version, initial);
   const [matchFilter, setMatchFilter] = useState<"all" | "played" | "upcoming">("all");
+  // лайтбокс эмблемы (feedback53 №3: «картинки команд… на маленьких
+  // кругляшах сложно разглядеть»)
+  const [logoOpen, setLogoOpen] = useState(false);
 
   if (error) return <EmptyState title="Команда не найдена" hint={error} />;
   if (!data || !data.team) return <LoadingBlock label="Загрузка команды..." />;
@@ -65,6 +69,14 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
 
   return (
     <div className="space-y-3">
+      {logoOpen && team.logoUrl && (
+        <Lightbox
+          images={[{ url: team.logoUrl, alt: `${team.name} — эмблема`, caption: team.name }]}
+          index={0}
+          onIndexChange={() => {}}
+          onClose={() => setLogoOpen(false)}
+        />
+      )}
       <Breadcrumbs
         items={[
           { label: "Главная", onClick: () => navigate("/") },
@@ -80,7 +92,21 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
           компактный ряд «форма · место · очки». Никаких свечений. ---------- */}
       <div className="overflow-hidden rounded-lg border border-sline bg-s1">
         <div className="flex flex-wrap items-center gap-3 px-3 py-3 sm:gap-4 sm:px-5 sm:py-4">
-          <Crest name={team.name} id={team.id} logoUrl={team.logoUrl} size="lg" className="rounded-lg ring-1 ring-white/10" />
+          {/* эмблема команды: клик открывает лайтбокс «поближе» (feedback53 №3);
+              заглушка-инициалы (без лого) просмотр НЕ открывает */}
+          {team.logoUrl ? (
+            <button
+              type="button"
+              onClick={() => setLogoOpen(true)}
+              title="Открыть эмблему"
+              aria-label={`Открыть эмблему команды ${team.name} на весь экран`}
+              className="cursor-zoom-in rounded-lg ring-1 ring-white/10 transition-shadow hover:ring-gold/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            >
+              <Crest name={team.name} id={team.id} logoUrl={team.logoUrl} size="lg" />
+            </button>
+          ) : (
+            <Crest name={team.name} id={team.id} size="lg" className="rounded-lg ring-1 ring-white/10" />
+          )}
           <div className="min-w-[180px] flex-1">
             <h1 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[22px] font-bold leading-tight text-ink">
               <span className="break-words">{team.name}</span>

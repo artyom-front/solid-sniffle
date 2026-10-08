@@ -28,6 +28,7 @@ import { navigate } from "./router";
 import { LoadingBlock, EmptyState, PositionBadge } from "./ui-bits";
 import { Field } from "./CrudPanels";
 import { MediaUpload } from "./MediaUpload";
+import { Lightbox } from "./Lightbox";
 import { SmartDelete } from "./SmartDelete";
 import { readFileTextSmart } from "@/lib/csvEncoding";
 import { templateText } from "@/lib/importTemplates";
@@ -79,6 +80,8 @@ export default function TeamDetailPanel({ teamId, version, bump, onBack, onOpenP
   const [showEnded, setShowEnded] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
+  // лайтбокс эмблемы (feedback53 №3: превью 64px — «поближе» по клику)
+  const [logoZoom, setLogoZoom] = useState(false);
   const [editReg, setEditReg] = useState<RegRow | null>(null);
   // Правки полей команды: хранятся ТОЛЬКО изменённые поля (поверх данных) —
   // форма не рассинхронизируется при обновлении данных после действий
@@ -165,6 +168,14 @@ export default function TeamDetailPanel({ teamId, version, bump, onBack, onOpenP
 
   return (
     <div className="space-y-4">
+      {logoZoom && team.logoUrl && (
+        <Lightbox
+          images={[{ url: team.logoUrl, alt: `${team.name} — эмблема`, caption: team.name }]}
+          index={0}
+          onIndexChange={() => {}}
+          onClose={() => setLogoZoom(false)}
+        />
+      )}
       {/* ---- Хлебные крошки ---- */}
       <nav className="flex items-center gap-1 text-sm text-zinc-400" aria-label="Навигация">
         <button onClick={onBack} className="flex items-center gap-1 rounded px-1 py-0.5 font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800">
@@ -178,7 +189,15 @@ export default function TeamDetailPanel({ teamId, version, bump, onBack, onOpenP
       {/* ---- Шапка-профиль ---- */}
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="flex flex-wrap items-start gap-4 p-4">
-          <MediaUpload value={team.logoUrl ?? ""} onChange={saveLogo} label="Эмблема" hint="Квадрат от 200×200" className="w-fit" previewAlt="Эмблема команды" />
+          <MediaUpload
+            value={team.logoUrl ?? ""}
+            onChange={saveLogo}
+            label="Эмблема"
+            hint="Квадрат от 200×200"
+            className="w-fit"
+            previewAlt="Эмблема команды"
+            onPreviewClick={team.logoUrl ? () => setLogoZoom(true) : undefined}
+          />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-black tracking-tight text-zinc-900">{team.name}</h2>

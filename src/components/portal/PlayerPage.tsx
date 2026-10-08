@@ -16,6 +16,7 @@ import { EVENT_LABELS, SOURCE_LABELS, POSITION_LABELS } from "@/lib/labels";
 import { LoadingBlock, PositionBadge, EmptyState } from "./ui-bits";
 import { EventIcon } from "./EventIcons";
 import { Avatar, Breadcrumbs, Crest, StatTile } from "./visuals";
+import { Lightbox } from "./Lightbox";
 
 interface PlayerDetail {
   player: {
@@ -94,6 +95,8 @@ type Tab = "career" | "stats" | "discipline";
 export default function PlayerPage({ personId, initial }: { personId: string; initial?: PlayerDetail | null }) {
   const { data, error } = useFetch<PlayerDetail>(`/api/public/players/${personId}`, 0, initial);
   const [tab, setTab] = useState<Tab>("career");
+  // лайтбокс фото (feedback53 №3: «на маленьких кругляшах сложно разглядеть»)
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   if (error) return <EmptyState title="Персона не найдена" hint={error} />;
   if (!data || !data.player) return <LoadingBlock label="Загрузка профиля..." />;
@@ -139,6 +142,14 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
 
   return (
     <div className="space-y-3">
+      {photoOpen && p.photoUrl && (
+        <Lightbox
+          images={[{ url: p.photoUrl, alt: `${p.name} — фото`, caption: p.name }]}
+          index={0}
+          onIndexChange={() => {}}
+          onClose={() => setPhotoOpen(false)}
+        />
+      )}
       <Breadcrumbs
         items={[
           { label: "Главная", onClick: () => navigate("/") },
@@ -151,7 +162,21 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
       {/* ---------- Гери профиля ---------- */}
       <div className="overflow-hidden rounded-lg border border-sline bg-s1">
         <div className="stadium-glow flex flex-wrap items-center gap-4 px-4 py-5 sm:px-6">
-          <Avatar name={p.name} id={p.id} photoUrl={p.photoUrl} size="xl" className="ring-2 ring-gold/30" />
+          {/* фото персоны: клик открывает лайтбокс «поближе» (feedback53 №3);
+              заглушка-инициалы (без фото) просмотр НЕ открывает */}
+          {p.photoUrl ? (
+            <button
+              type="button"
+              onClick={() => setPhotoOpen(true)}
+              title="Открыть фото"
+              aria-label={`Открыть фото ${p.name} на весь экран`}
+              className="cursor-zoom-in rounded-full ring-2 ring-gold/30 transition-shadow hover:ring-gold/70 focus:outline-none focus-visible:ring-2 focus-visible:ring-gold"
+            >
+              <Avatar name={p.name} id={p.id} photoUrl={p.photoUrl} size="xl" />
+            </button>
+          ) : (
+            <Avatar name={p.name} id={p.id} size="xl" className="ring-2 ring-gold/30" />
+          )}
           <div className="min-w-0 flex-1">
             <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-bold leading-tight text-ink">
               {p.name}

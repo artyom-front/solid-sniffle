@@ -23,9 +23,13 @@ interface Props {
    *  «Создать» ждут окончания загрузки (фикс «двух нажатий»: раньше баннер
    *  успевал создаться без картинки, а url приходил в уже закрытую форму). */
   onUploadingChange?: (uploading: boolean) => void;
+  /** v1.0.53 (feedback53 №3): клик по превью открывает лайтбокс «посмотреть
+   *  поближе» — родитель рендерит Lightbox. Без пропа превью не кликабельно
+   *  (поведение форм не меняется). Пустым заглушкам клик не назначают. */
+  onPreviewClick?: () => void;
 }
 
-export function MediaUpload({ value, onChange, label = "Фото", hint, accept = "image/*", round, className, previewAlt, onUploadingChange }: Props) {
+export function MediaUpload({ value, onChange, label = "Фото", hint, accept = "image/*", round, className, previewAlt, onUploadingChange, onPreviewClick }: Props) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
@@ -64,7 +68,15 @@ export function MediaUpload({ value, onChange, label = "Фото", hint, accept 
               <img
                 src={value}
                 alt={previewAlt ?? "Загруженное изображение"}
-                className={cn("h-16 w-16 border border-zinc-200 bg-white object-cover", round ? "rounded-full" : "rounded-lg")}
+                className={cn(
+                  "h-16 w-16 border border-zinc-200 bg-white object-cover",
+                  round ? "rounded-full" : "rounded-lg",
+                  // «посмотреть поближе» (feedback53 №3): курсор-лупа + hover-ring
+                  onPreviewClick && "cursor-zoom-in transition-shadow hover:ring-2 hover:ring-emerald-400"
+                )}
+                title={onPreviewClick ? "Открыть фото" : undefined}
+                onClick={onPreviewClick}
+                draggable={false}
               />
             ) : (
               <span className="flex h-16 w-16 items-center justify-center rounded-lg border border-zinc-200 bg-zinc-50 text-xs text-zinc-400">Файл</span>

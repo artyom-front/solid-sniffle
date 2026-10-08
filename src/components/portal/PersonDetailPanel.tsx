@@ -25,6 +25,7 @@ import { navigate } from "./router";
 import { LoadingBlock, EmptyState } from "./ui-bits";
 import { Field } from "./CrudPanels";
 import { MediaUpload } from "./MediaUpload";
+import { Lightbox } from "./Lightbox";
 import { SmartDelete } from "./SmartDelete";
 import { SYSTEM_ROLES, ROLE_GROUP_LABELS, CARD_ROLE_CONFLICT_HINT, type RoleDef } from "@/lib/roles";
 
@@ -77,6 +78,8 @@ export default function PersonDetailPanel({ personId, version, bump, onBack, bac
   const [edits, setEdits] = useState<Partial<{ firstName: string; lastName: string; middleName: string; birthDate: string; gender: string; position: string; roles: string[] }>>({});
   const [saving, setSaving] = useState(false);
   const [regBusy, setRegBusy] = useState<string | null>(null);
+  // лайтбокс фото персоны (feedback53 №3: превью 64px — «поближе» по клику)
+  const [photoZoom, setPhotoZoom] = useState(false);
 
   const person = data?.person;
   const customRoles = customRolesData?.customRoles ?? [];
@@ -159,6 +162,14 @@ export default function PersonDetailPanel({ personId, version, bump, onBack, bac
 
   return (
     <div className="space-y-4">
+      {photoZoom && person.photoUrl && (
+        <Lightbox
+          images={[{ url: person.photoUrl, alt: `${fullName} — фото`, caption: fullName }]}
+          index={0}
+          onIndexChange={() => {}}
+          onClose={() => setPhotoZoom(false)}
+        />
+      )}
       {/* ---- Хлебные крошки ---- */}
       <nav className="flex items-center gap-1 text-sm text-zinc-400" aria-label="Навигация">
         <button onClick={onBack} className="flex items-center gap-1 rounded px-1 py-0.5 font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-800">
@@ -171,7 +182,16 @@ export default function PersonDetailPanel({ personId, version, bump, onBack, bac
       {/* ---- Шапка-профиль ---- */}
       <div className="rounded-xl border border-zinc-200 bg-white">
         <div className="flex flex-wrap items-start gap-4 p-4">
-          <MediaUpload value={person.photoUrl ?? ""} onChange={savePhoto} label="Фото" hint="Квадрат от 300×300" round className="w-fit" previewAlt="Фото персоны" />
+          <MediaUpload
+            value={person.photoUrl ?? ""}
+            onChange={savePhoto}
+            label="Фото"
+            hint="Квадрат от 300×300"
+            round
+            className="w-fit"
+            previewAlt="Фото персоны"
+            onPreviewClick={person.photoUrl ? () => setPhotoZoom(true) : undefined}
+          />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="text-xl font-black tracking-tight text-zinc-900">{fullName}</h2>
