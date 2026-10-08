@@ -3034,3 +3034,123 @@ Stage Summary:
 - СИГНАТУРЫ обеих линий в дереве merge53: OURS — PersonFields.tsx, lib/engine/match-state.ts, tests/unit/match-state.test.ts; THEIRS — portal/logo-paths.ts, lib/branding.ts, миграция 00000000000006_branding, api/admin/brand/route.ts, lib/services/branding.ts, оба их теста, public/brand/logo47/*. ✓
 - merge53 = d4257ee, родители b2f6529 (наш графт) + b558f32 (их графт); main НЕ тронут (c133b48, как был); push не выполнялся; build/make-archives не запускались; transfer/ не тронут.
 - СЛЕДУЮЩИМ МИССИЯМ (SEO-картинки / lightbox / монограмма SB): BrandSetting уже в схеме и БД — фичи строятся на нём (logoDarkUrl/logoLightUrl/iconUrl, Media bytea). Помнить: (а) watchdog переключает на main — всегда проверять ветку и работать быстрыми single-call-коммитами; (б) export DATABASE_URL перед prisma/bun test; (в) версия в package.json сознательно 1.0.52 (bump — отдельным релизным коммитом); (г) их RegistrationsPanel-дебаунс не портирован (у нас all=1) — если юзер попросит «поиск по всей базе с подсказкой», добавить ?q-режим в persons API.
+
+
+---
+
+Task ID: 57b
+Agent: subagent-features
+Date: 2026-10-08
+Task: feedback53 (юзер-фидбек 2026-10-08) — 3 фичи на ветке merge53:
+(1) SB-монограмма как малый знак; (2) SEO-картинки для поисковиков из
+админки (og:image + JSON-LD); (3) лайтбокс для фото персон и эмблем.
+
+Work Log:
+- №1 SB-МОНОГРАММА (юзер: «Маленьких лого, фавиконы и прочие надо
+  упростить до SB в нашем стиле»): генератор scripts/make-sb-mark.py
+  (fontTools, паттерн make-logo47.py) — заглавные S+B из Baloo 2
+  ExtraBold ЧИСТЫМИ SVG-ПУТЯМИ (без <text>: фавикон без webfont-
+  зависимости, читается в 16px), бейдж — золотой квадрат rx 17.5%
+  (геометрия знака-поля logo47 — единый стиль), литеры ink, кернинг
+  пары -1.6, ink-выключка по центру сетки 64. Ассеты
+  public/brand/logo53/: mark.svg (фавикон), mark-180.svg +
+  apple-icon.png 180×180 (растеризация scripts/make-sb-assets.mjs —
+  sharp, суперсэмплинг ×4 + LANCZOS, паттерн make-brand-assets.mjs),
+  og.svg + public/brand/og-default.png 1200×630 (монограмма +
+  парадная вертикаль logo47 + домен путями Onest; PNG — скрейперы
+  соцсетей SVG не читают). VLM-проверка дизайна: литеры читаемы,
+  выключка корректна. Дефолты: lib/branding.ts DEFAULT_ICON_URL/
+  DEFAULT_APPLE_ICON_URL → logo53 (был знак-поле logo47 — разметка
+  не читалась в 16–24px); LogoMark (Logo.tsx) рендерит монограмму
+  (mono — currentColor-литеры, simple — совместимость вызовов);
+  BrandLogo без кастомного лого при height ≤32px — монограмма;
+  layout apple sizes 180x180. Админские загрузки BrandSetting
+  перекрывают дефолты как раньше. Коммит 2513216.
+- №2 SEO (юзер: «в яндексе нашел сайт, но у него нет лого — надо
+  добавить в админку добавление картинок для поисковых систем»):
+  BrandSetting + ogImageUrl (миграция 00000000000007_seo, применена
+  локально; тот же паттерн, что logo/icon: URL создаётся ТОЛЬКО
+  загрузкой, каждая загрузка = новый Media id). Фото-пайплайн:
+  PNG/JPG/WebP/AVIF до 8 МБ, БЕЗ квадратной нормализации (1200×630 —
+  не квадрат) и БЕЗ конвертаций; SVG/ICO запрещены. POST/PATCH
+  /api/admin/brand принимают/сбрасывают ogImage (цикл BRAND_KINDS);
+  readBranding/DEFAULT_BRANDING/BrandingDTO/site-config несут
+  ogImageUrl. BrandingPanel — подсекция «SEO и поисковые системы»:
+  мокап карточки ссылки (как Яндекс/Telegram превьюируют),
+  подсказка «рекомендация 1200×630, к квадрату НЕ приводим; Яндекс
+  и соцсети покажут эту картинку рядом со ссылкой». layout:
+  openGraph.images/twitter.images = ogImageUrl ||
+  /brand/og-default.png; RootLayout (async) — JSON-LD Organization
+  {name, url, logo} + WebSite {name, url} в исходном HTML (seo.tsx
+  + organizationJsonLd/webSiteJsonLd + компонент JsonLd; имя —
+  BRAND.name, url — SITE_URL env, лого — брендинг админки ||
+  SB-монограмма; getBranding в generateMetadata и layout — один
+  запрос к БД через cache()). Коммит 505f75f.
+- №3 ЛАЙТБОКС (юзер: «добавил фото игроков и картинки команд, но их
+  нельзя посмотреть поближе — на маленьких кругляшах сложно
+  разглядеть»): НОВЫЙ src/components/portal/Lightbox.tsx ('use
+  client', управляемый) — fixed inset-0 z-[60] bg-black/90 (клик по
+  фону закрывает), img object-contain max-h-[92dvh] max-w-[94vw];
+  зум 1–3: +/−/сброс/двойной клик 1↔2/колесо (нативный листенер
+  passive:false — React-onWheel пассивен), Esc закрыть, ←/→ листать
+  (циклично), счётчик «n из m» + масштаб %, свайп на тач (порог
+  48px, вертикаль игнорируется), кнопки 44×44, role=dialog +
+  aria-modal + aria-label, aria-live, sr-инструкция, фокус на
+  диалог + блок прокрутки фона. Интеграции: PlayerPage (круглое
+  фото персоны) и TeamPage (эмблема) — cursor-zoom-in + hover-ring
+  + title «Открыть фото», заглушки-инициалы БЕЗ фото просмотр НЕ
+  открывают; PersonDetailPanel/TeamDetailPanel — превью MediaUpload
+  через НОВЫЙ проп onPreviewClick (без пропа превью не кликабельно —
+  формы не меняются). Alt осмысленные (имя персоны / «X — эмблема»).
+  Коммит 07611a2.
+- ГРАБЛЯ: (а) watchdog успел переключить на main ДО патчера F3 —
+  патчи MediaUpload/PlayerPage/TeamPage ушли в рабочее дерево main;
+  main восстановлен git checkout -- (статус чист, HEAD c133b48),
+  патчи переложены на merge53; аналогично ДВА аппенда worklog
+  попадали на main (переключение между командами) — откачены,
+  переложены; ЗАЩИТА: проверка ветки в НАЧАЛЕ команды (checkout +
+  grep -qx merge53), аппенд+коммит одной командой, во время смока
+  ветка держалась модификацией merge53-only файла (git switch
+  отказывается при локальных правках, расходящихся с main); (б)
+  eslint react-hooks/set-state-in-effect — сброс зума при листании
+  перенесён из useEffect в go(); (в) dev-сервер держал в памяти
+  Prisma-клиент БЕЗ BrandSetting (запущен до merge53, клиент от
+  main): POST /api/admin/brand падал 500 «Cannot read properties of
+  undefined (reading 'upsert')» — РЕСТАРТ с export DATABASE_URL
+  поднял свежий клиент.
+- СМОК (dev :3000, рестартнутый, merge53): GET / 200; /api/health
+  ok:true (ФЛАГ: version «1.0.0» — health читает APP_VERSION env,
+  НЕ package.json, env не задан); /api/public/site-config →
+  branding с ogImageUrl; HTML главной: <link rel=icon> →
+  /brand/logo53/mark.svg, apple-touch-icon 180×180, og:image →
+  og-default.png (абсолютный через metadataBase), twitter:card
+  summary_large_image, 2× JSON-LD (Organization с logo-URL, WebSite).
+  E2E og: загрузка PNG → og:image+twitter:image=/api/media/<id>,
+  сброс PATCH null → дефолт; SVG → 422 «не поддерживается —
+  разрешены PNG, JPEG, WEBP, AVIF». Лайтбокс в браузере: клик по
+  фото игрока (тест-фото) → dialog открыт, счётчик «1 из 1», зум
+  100%→150% по кнопке, Esc закрывает, кнопки 44×44. Тест-данные
+  вычищены (photoUrl=null, тест-медиа удалены через DELETE).
+- ВАЛИДАЦИЯ: bunx tsc --noEmit — 0 ошибок; bunx eslint . — 0;
+  bun test tests/unit — 149/149 (147 + 2 og-теста), 615 expect.
+
+Stage Summary:
+- Ветка merge53: 2686f49 → 2513216 (№1) → 505f75f (№2) → 07611a2
+  (№3) → этот docs-коммит. main НЕ тронут (c133b48; случайные патчи
+  рабочего дерева откатаны, blob-ы совпадают), push НЕ выполнялся,
+  build/make-archives НЕ запускались, transfer/ не тронут.
+- МИГРАЦИЯ ОДНА: 00000000000007_seo (ALTER TABLE "BrandSetting"
+  ADD COLUMN "ogImageUrl" TEXT) — данных не требует, деплой
+  применит штатно.
+- ДОСТАВКЕ (final mission): bump package.json 1.0.52 → 1.0.53
+  отдельным релизным коммитом; имя бандла —
+  scoresbox-2026-10-08-feedback53.git-bundle; панель /download
+  (README + бандл) требует пересборки ПОСЛЕ коммитов (правила
+  56a/56b); /api/health показывает «1.0.0» (APP_VERSION env не
+  задан — юзер может спросить, это не баг кода, а env/статика);
+  витрина /brand/logo-variants.html историческая (logo47), SB-
+  монограммы там нет — при желании добавить в follow-up.
+- Остатки: лайтбокс подключён в 4 местах (юзеровские фидбек-точки);
+  потенциальные — стат-карточки бомбардиров, составы протокола —
+  по запросу. Регрессий в их линию (RegistrationsPanel-дебаунс и
+  пр.) не вносилось.
