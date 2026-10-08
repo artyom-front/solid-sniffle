@@ -31,9 +31,9 @@ import { ChevronDown, LogOut, Search, Settings2, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { BRAND } from "./brand";
-import { Logo, LogoWordmark } from "./Logo";
+import { BrandLogo } from "./Logo";
 import { bindRouter, HashRedirect, useSession } from "./router";
-import type { BannerDTO, OverviewDTO, SessionUserDTO, StatBlockDTO } from "./types";
+import type { BannerDTO, BrandingDTO, OverviewDTO, SessionUserDTO, StatBlockDTO } from "./types";
 import SearchDialog, { openGlobalSearch } from "./SearchDialog";
 import LeaguesSidebar from "./LeaguesSidebar";
 import RightRail, { BannerSlot } from "./RightRail";
@@ -251,6 +251,10 @@ interface Props {
   overview: OverviewDTO;
   banners: BannerDTO[];
   statBlocks: StatBlockDTO[];
+  /** v1.0.48: брендинг из админки — лого шапки/футера (приходит из SSR
+   *  (site)/layout — в HTML сразу, без мигания). Фавикон применяется
+   *  отдельно — через generateMetadata корневого layout. */
+  branding?: BrandingDTO | null;
   children: React.ReactNode;
 }
 
@@ -332,7 +336,7 @@ function LeaguesAccordion({
   );
 }
 
-export default function SiteShell({ overview, banners, statBlocks, children }: Props) {
+export default function SiteShell({ overview, banners, statBlocks, branding, children }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const { user, setUser } = useSession<SessionUserDTO>();
@@ -367,10 +371,11 @@ export default function SiteShell({ overview, banners, statBlocks, children }: P
   // реклама справа (≥768px), под матчем на мобиле — секции статистики
   // и аккордеон лиг. Ряд из 3 реклам над матчем убран — RIGHT-слоты
   // возвращаются в правую колонку (как на v1.0.40 и на flashscore).
-  // Профильные страницы (игрок/команда/стадион), наоборот, — «только
-  // своя информация»: без правого рейла («Прямо сейчас», «Самый
-  // результативный», таблица, топ-игроки) и без колонки лиг — широкая
-  // центральная колонка; реклама остаётся (AD-TOP/AD-BOTTOM в центре).
+  // v1.0.46 (фидбек 2026-10-06): профильные страницы (игрок/команда/
+  // стадион) — СНОВА в общей сетке: колонки статистики ПО КРАЯМ
+  // остаются, центр — только профильная суть. Без колонок остаётся
+  // только МОБИЛЬНАЯ витрина статистики (<768px) — чтобы не
+  // растягивать профильный экран.
   const isProfilePage = /^\/(player|team|stadium)\//.test(pathname ?? "");
   const year = new Date().getFullYear();
   // виды футбола в меню: из БД (админка), fallback — базовая четвёрка
@@ -417,12 +422,14 @@ export default function SiteShell({ overview, banners, statBlocks, children }: P
         </div>
       )}
 
-      {/* ---------- Шапка: логотип в одну строку (Р-01: знак-поле 32px +
-          «scoresbox», box — золотым; слоган — только ≥1024px), поиск ---------- */}
+      {/* ---------- Шапка: ЛОГОТИПО (v1.0.48 — двухъярусный «scores» над
+          «b[поле]x», SVG-пути — переносы невозможны; заменяется на
+          загруженный из админки («Сайт → Брендинг»)), слоган — ≥1024px,
+          поиск ---------- */}
       <header className="sticky top-0 z-40 border-b border-sline bg-s0/95 backdrop-blur">
         <div className={cn("mx-auto flex h-14 w-full items-center gap-3 px-4 min-[768px]:h-16", SITE_WIDTH)}>
           <a href="/" className="flex min-w-0 items-center" aria-label="SCORESBOX — на главную">
-            <Logo subtitle={BRAND.tagline} />
+            <BrandLogo branding={branding} subtitle={BRAND.tagline} variant="dark" height={44} />
           </a>
 
           <button
@@ -488,32 +495,34 @@ export default function SiteShell({ overview, banners, statBlocks, children }: P
 
       {/* ---------- Сетка сайта (Р-05): контейнер 1200px центрирован,
           выше — растут только поля. ≥1200px — три колонки (лиги 220px •
-          центр 1fr • статистика 300px); 768–1199 — центр + статистика,
-          лиги — аккордеоном ПОД контентом; <768 — одна колонка: центр →
+          центр 1fr • статистика 300px); 768–1199 — центр + статистика
+          (240px на 768–1023 и 280px на 1024–1199 — фидбек 2026-10-06:
+          правый столбец на планшете занимал почти пол-экрана), лиги —
+          аккордеоном ПОД контентом; <768 — одна колонка: центр →
           виджеты статистики секциями → аккордеон лиг в конце. Колонки
           фиксированной ширины → реклама в них не двигает центр (анти-CLS).
-          v1.0.44: матч — снова в общей сетке (откат v1.0.41);
-          профильные страницы — одна широкая колонка. ---------- */}
+          v1.0.46: профильные страницы — снова в общей сетке; мобильная
+          витрина статистики на них НЕ рендерится. ---------- */}
       <main className="relative z-10 flex-1">
         <div
           className={cn(
             "mx-auto grid w-full grid-cols-1 justify-center gap-3 px-4 py-3",
-            !isProfilePage && "min-[768px]:grid-cols-[minmax(0,1fr)_300px] min-[1200px]:grid-cols-[220px_minmax(0,1fr)_300px]",
+            // правый столбец ужимается СТУПЕНЧАТО с экраном (золотой
+            // стандарт 3 колонок: борт ≤ 25–30% вьюпорта, центр — главный)
+            "min-[768px]:grid-cols-[minmax(0,1fr)_240px] min-[1024px]:grid-cols-[minmax(0,1fr)_280px] min-[1200px]:grid-cols-[220px_minmax(0,1fr)_300px]",
             SITE_WIDTH
           )}
         >
           {/* Левая колонка: список лиг (закреплённые — выше) и реклама.
               Живёт только от 1200px — ниже контент важнее навигации.
-              На профильных страницах её нет (v1.0.44) */}
-          {!isProfilePage && (
-            <aside className="sticky top-[121px] hidden max-h-[calc(100vh-129px)] self-start overflow-y-auto pr-1 scrollbar-s21 min-[1200px]:block">
-              <BannerSlot banner={leftTopBanner} />
-              <LeaguesSidebar overview={overview} version={version} activeLeagueId={activeLeagueId} />
-              <div className="mt-3">
-                <BannerSlot banner={leftBottomBanner} />
-              </div>
-            </aside>
-          )}
+              v1.0.46: и на профильных страницах (статистика по краям) */}
+          <aside className="sticky top-[121px] hidden max-h-[calc(100vh-129px)] self-start overflow-y-auto pr-1 scrollbar-s21 min-[1200px]:block">
+            <BannerSlot banner={leftTopBanner} />
+            <LeaguesSidebar overview={overview} version={version} activeLeagueId={activeLeagueId} />
+            <div className="mt-3">
+              <BannerSlot banner={leftBottomBanner} />
+            </div>
+          </aside>
 
           {/* Центральная колонка — главный экран: не сдвигается и не
               ужимается (ширина задаётся сеткой, а не содержимым) */}
@@ -528,8 +537,8 @@ export default function SiteShell({ overview, banners, statBlocks, children }: P
 
             {/* <768px: правая панель статистики — секциями ПОД лентой
                 (карточки «Прямо сейчас», «Самой результативный», таблица).
-                На профильных страницах — НЕ рендерим (v1.0.44: только
-                своя информация).
+                На профильных страницах — НЕ рендерим (v1.0.46: мобильный
+                профиль остаётся компактным, статистика — в колонках ≥768).
                 Sidebar-реклама здесь НЕ рендерится: слот AD-SIDEBAR
                 живёт только при ≥768px (директива), креатив — в TOP/BOTTOM. */}
             {!isProfilePage && (
@@ -555,14 +564,11 @@ export default function SiteShell({ overview, banners, statBlocks, children }: P
           {/* Правая колонка: статистика, турнирная таблица и реклама.
               Живёт колонкой от 768px (директива Р-05); ниже — секции
               под лентой (см. выше), слот AD-SIDEBAR — только тут.
-              v1.0.44: снова НА ВСЕХ страницах, включая матч (откат
-              v1.0.41 по фидбеку 2026-10-05); на профильных страницах
-              колонки нет — «только своя информация» */}
-          {!isProfilePage && (
-            <aside className="sticky top-[121px] hidden max-h-[calc(100vh-129px)] self-start overflow-y-auto pl-1 scrollbar-s21 min-[768px]:block">
-              <RightRail overview={overview} banners={banners} statBlocks={statBlocks} version={version} layout="rail" />
-            </aside>
-          )}
+              v1.0.46: и на профильных страницах (фидбек 2026-10-06:
+              «колонки слева и справа со статистикой — оставить») */}
+          <aside className="sticky top-[121px] hidden max-h-[calc(100vh-129px)] self-start overflow-y-auto pl-1 scrollbar-s21 min-[768px]:block">
+            <RightRail overview={overview} banners={banners} statBlocks={statBlocks} version={version} layout="rail" />
+          </aside>
         </div>
       </main>
 
@@ -570,9 +576,8 @@ export default function SiteShell({ overview, banners, statBlocks, children }: P
       <footer className="relative z-10 mt-auto border-t border-sline bg-[#07090d]">
         <div className={cn("mx-auto flex w-full flex-col gap-2 px-4 py-6 text-xs text-ink3 sm:flex-row sm:items-center sm:justify-between", SITE_WIDTH)}>
           <p className="flex items-center gap-2 text-ink">
-            <span>© {year}</span>
-            <LogoWordmark className="text-sm" />
-            <span className="text-ink3">{BRAND.domain}</span>
+            <BrandLogo branding={branding} variant="dark" height={40} />
+            <span className="text-ink3">© {year} · {BRAND.domain}</span>
           </p>
           <p>Матчи · турниры · таблицы · протоколы</p>
         </div>

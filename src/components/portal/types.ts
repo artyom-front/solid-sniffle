@@ -57,6 +57,15 @@ export interface StatBlockDTO {
   imagePos?: string | null;
 }
 
+/** Брендинг сайта (v1.0.48): логотип и иконка браузера из админки.
+ *  URL — /api/media/<id> либо null (= встроенный лого v1.0.47:
+ *  LogoVertical «scores» над «b[поле]x» и знак-поле в фавиконе). */
+export interface BrandingDTO {
+  logoDarkUrl: string | null;
+  logoLightUrl: string | null;
+  iconUrl: string | null;
+}
+
 export interface OverviewDTO {
   /** виды футбола для меню (видимые, по порядку админа) */
   formats?: FormatLinkDTO[];

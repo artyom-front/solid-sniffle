@@ -107,13 +107,14 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
                 </span>
                 {top.topScorer && (
                   <button
-                    className={cn("flex items-center gap-1 text-xs hover:text-gold", top.topScorer.out ? "text-live" : "text-ink3")}
+                    className={cn("flex items-center gap-1.5 text-xs hover:text-gold", top.topScorer.out ? "text-live" : "text-ink3")}
                     onClick={() => navigate(`/player/${top.topScorer!.personId}`)}
                     title={top.topScorer.out ? "Лучший бомбардир дисквалифицирован — не сыграет" : "Лучший бомбардир команды в сезоне"}
                   >
                     <BallIcon className="h-3 w-3" />
-                    бомбардир: {top.topScorer.name} · {top.topScorer.goals}
-                    {top.topScorer.out && <UserX className="h-3 w-3" />}
+                    <span className="shrink-0">бомбардир:</span>
+                    <span className="min-w-0 break-words font-bold text-ink2">{top.topScorer.name} · {top.topScorer.goals}</span>
+                    {top.topScorer.out && <UserX className="h-3 w-3 shrink-0" />}
                   </button>
                 )}
               </p>
@@ -135,7 +136,10 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
         )}
       </div>
 
-      <div className="grid gap-3 xl:grid-cols-2">
+      {/* v1.0.46 (фидбек 2026-10-06): состав — ПЕРВЫМ, результаты —
+          ПОД ним, друг под другом (не рядом) — широкий список матчей
+          читается без перескакиваний */}
+      <div className="grid grid-cols-1 gap-3">
         {/* ---------- Состав + тренер ---------- */}
         {current && (
           <div className="overflow-hidden rounded-lg border border-sline bg-s1">

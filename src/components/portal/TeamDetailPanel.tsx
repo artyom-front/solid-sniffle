@@ -469,7 +469,9 @@ function AddPlayerDialog({ open, onClose, teamId, seasonId, seasonLabel, version
   const [np, setNp] = useState<PersonFormValue>(emptyPersonForm());
   const [dupes, setDupes] = useState<PersonDuplicate[] | null>(null);
 
-  const { data } = useFetch<{ persons: PersonLite[] }>(open && mode === "find" && q.trim().length >= 2 ? `/api/admin/persons?q=${encodeURIComponent(q.trim())}` : null, version);
+  // v1.0.49-port: pageSize=100 в поиске персон (был дефолт 50 — тёзки «за
+  // алфавитом» не попадали в выборку find-диалога)
+  const { data } = useFetch<{ persons: PersonLite[] }>(open && mode === "find" && q.trim().length >= 2 ? `/api/admin/persons?q=${encodeURIComponent(q.trim())}&pageSize=100` : null, version);
   const { data: customRolesData } = useFetch<{ customRoles: CustomRoleDTO[] }>(open ? "/api/admin/customroles" : null, version);
   const customRoles = customRolesData?.customRoles ?? [];
   const found = (data?.persons ?? []).slice(0, 12);

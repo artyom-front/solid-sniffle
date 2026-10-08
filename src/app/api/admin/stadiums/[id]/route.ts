@@ -19,7 +19,16 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     }
     if (body.city !== undefined) data.city = body.city || null;
     if (body.address !== undefined) data.address = body.address || null;
-    if (body.capacity !== undefined) data.capacity = body.capacity ? Number(body.capacity) : null;
+    // v1.0.49 (аудит Task 56): вместимость — как в POST: целое ≥ 0 или null
+    if (body.capacity !== undefined) {
+      if (body.capacity === null || body.capacity === "") {
+        data.capacity = null;
+      } else {
+        const n = Number(body.capacity);
+        if (!Number.isInteger(n) || n < 0) throw new HttpError(422, "Вместимость: целое неотрицательное число (мест)");
+        data.capacity = n;
+      }
+    }
     if (body.photoUrl !== undefined) {
       if (body.photoUrl && !String(body.photoUrl).startsWith("/api/media/")) throw new HttpError(422, "Фото загружается через медиатеку");
       data.photoUrl = body.photoUrl || null;

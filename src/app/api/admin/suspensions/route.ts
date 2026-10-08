@@ -67,6 +67,11 @@ export async function POST(req: Request) {
       await assertSeasonInScope(user, seasonId);
       const season = await db.season.findUnique({ where: { id: seasonId } });
       if (!season) throw new HttpError(404, "Сезон не найден");
+      // v1.0.49 (аудит Task 56): проверка существования игрока — раньше
+      // произвольный personId падал FK-ошибкой Prisma → 500 (образец:
+      // registrations POST отдаёт честную 404)
+      const person = await db.person.findUnique({ where: { id: personId }, select: { id: true, lastName: true, firstName: true } });
+      if (!person) throw new HttpError(404, "Игрок не найден — возможно, профиль был удалён. Обновите список.");
 
       const s = await db.suspension.create({
         data: {
@@ -92,7 +97,15 @@ export async function POST(req: Request) {
       const updated = await db.suspension.update({
         where: { id },
         data: {
-          matchesTotal: matchesTotal !== undefined ? Math.max(1, Number(matchesTotal)) : s.matchesTotal,
+          // v1.0.49 (аудит Task 56): NaN-срок — честная 422 (Number(NaN) — NaN,
+          // Math.max(1, NaN) — NaN → Prisma 500)
+          matchesTotal: (() => {
+            if (matchesTotal === undefined) return s.matchesTotal;
+            if (isLifetime !== undefined && !!isLifetime) return 0;
+            const n = Number(matchesTotal);
+            if (!Number.isInteger(n) || n < 1) throw new HttpError(422, "Срок: целое число матчей от 1");
+            return n;
+          })(),
           reason: reason !== undefined ? reason : s.reason,
           isLifetime: isLifetime !== undefined ? !!isLifetime : s.isLifetime,
           isActive: isActive !== undefined ? !!isActive : s.isActive,

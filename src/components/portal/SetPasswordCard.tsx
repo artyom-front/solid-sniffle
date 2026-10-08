@@ -17,10 +17,13 @@ import { KeyRound, Loader2, ShieldCheck, Eye, EyeOff, MailCheck, PencilLine } fr
 import { apiPost, useFetch } from "./hooks";
 import { navigate } from "./router";
 import type { SessionUserDTO } from "./types";
-import { Logo } from "./Logo";
+import { BrandLogo } from "./Logo";
+import type { BrandingDTO } from "./types";
 
 interface Props {
   token: string;
+  /** v1.0.48: кастомный лого из «Сайт → Брендинг» (NULL — встроенный) */
+  branding?: BrandingDTO | null;
   onDone: (user: SessionUserDTO) => void;
 }
 
@@ -34,7 +37,7 @@ interface Preview {
 
 const ttlText = (p: Preview) => (p.ttl >= 24 * 60 ? `${Math.round(p.ttl / 60 / 24)} дн.` : `${Math.round(p.ttl / 60)} мин.`);
 
-export function SetPasswordCard({ token, onDone }: Props) {
+export function SetPasswordCard({ token, branding, onDone }: Props) {
   const { data: preview, error: previewError } = useFetch<Preview>(`/api/auth/password/set?token=${encodeURIComponent(token)}`);
 
   const [password, setPassword] = useState("");
@@ -107,8 +110,14 @@ export function SetPasswordCard({ token, onDone }: Props) {
   return (
     <div className="theme-dark flex min-h-screen items-center justify-center bg-s0 px-4 text-ink">
       <div className="w-full max-w-sm space-y-5 rounded-2xl border border-sline bg-s1 p-7 shadow-2xl">
-        <div className="flex items-center gap-2.5">
-          <Logo glyph={40} wordmarkClassName="text-lg" subtitle={preview.kind === "invite" ? "приглашение · установка пароля" : "сброс пароля"} />
+        <div className="flex items-center gap-4">
+          {/* v1.0.48: кастомный лого из админки либо встроенная
+              вертикаль (v1.0.47, пути) + подпись контекста */}
+          <BrandLogo branding={branding} height={58} variant="dark" />
+          <div className="min-w-0">
+            <p className="text-sm font-bold text-ink">SCORESBOX</p>
+            <p className="text-xs text-ink3">{preview.kind === "invite" ? "приглашение · установка пароля" : "сброс пароля"}</p>
+          </div>
         </div>
 
         <div className="rounded-lg border border-sline bg-s2 p-3.5 text-xs leading-relaxed text-ink3">

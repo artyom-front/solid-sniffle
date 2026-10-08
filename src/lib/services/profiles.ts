@@ -15,6 +15,9 @@ const ROUT_THRESHOLD = 10;
 
 interface TeamInsight {
   last5: { scored: number; conceded: number; matches: number } | null;
+  /** текущие серии «в каждом матче»: сколько ПОДРЯД матчей с ≥1 забитым /
+   *  пропущенным (показ — от 10+, фидбек 2026-10-06) */
+  streaks: { scored: number; conceded: number } | null;
   /** самое крупное взятие ворот — если 10+, это факт для превью */
   rout: { goals: number; opponent: string; date: string; score: string } | null;
   /** самое крупное поражение — если пропустила 10+ */
@@ -35,12 +38,18 @@ async function teamInsights(teamId: string): Promise<TeamInsight> {
   let scored = 0, conceded = 0;
   let rout: TeamInsight["rout"] = null;
   let collapse: TeamInsight["collapse"] = null;
+  // текущие серии «в каждом матче»: считаем от свежего матча назад,
+  // пока команда забивает (scored) / пропускает (conceded)
+  let scoredStreak = 0, concededStreak = 0;
+  let scoredRun = true, concededRun = true;
   ms.forEach((m, i) => {
     const isHome = m.homeTeamId === teamId;
     const my = (isHome ? m.homeScore : m.awayScore) ?? 0;
     const opp = (isHome ? m.awayScore : m.homeScore) ?? 0;
     const oppName = displayTeamName(isHome ? m.awayTeam.name : m.homeTeam.name);
     if (i < 5) { scored += my; conceded += opp; }
+    if (scoredRun && my > 0) scoredStreak++; else scoredRun = false;
+    if (concededRun && opp > 0) concededStreak++; else concededRun = false;
     if (my >= ROUT_THRESHOLD && (!rout || my > rout.goals)) {
       rout = { goals: my, opponent: oppName, date: m.kickoff.toISOString(), score: `${my}:${opp}` };
     }
@@ -50,6 +59,7 @@ async function teamInsights(teamId: string): Promise<TeamInsight> {
   });
   return {
     last5: ms.length > 0 ? { scored, conceded, matches: Math.min(5, ms.length) } : null,
+    streaks: ms.length > 0 ? { scored: scoredStreak, conceded: concededStreak } : null,
     rout,
     collapse,
   };

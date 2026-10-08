@@ -21,8 +21,10 @@ export async function POST(req: Request) {
       throw new HttpError(403, "Судья не может оценить собственный матч");
     }
 
+    // v1.0.49 (аудит Task 56): NaN обходит сравнения (NaN<1 и NaN>5 — false)
+    // и уезжал в Prisma → 500. Number.isFinite закрывает обе двери.
     const r = Number(rating);
-    if (r < 1 || r > 5) throw new HttpError(422, "Оценка должна быть от 1 до 5");
+    if (!Number.isInteger(r) || r < 1 || r > 5) throw new HttpError(422, "Оценка должна быть целой от 1 до 5");
 
     const existing = await db.refereeRating.findUnique({
       where: { matchId_authorUserId: { matchId, authorUserId: user.id } },

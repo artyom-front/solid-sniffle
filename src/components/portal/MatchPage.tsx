@@ -14,22 +14,30 @@ import {
   FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useFetch, fmtDate, fmtShortDate } from "./hooks";
+import { useFetch, fmtShortDate } from "./hooks";
 import { navigate, useSession } from "./router";
 import type { MatchDTO, SessionUserDTO, StandingRowDTO, MatchSignalsDTO } from "./types";
-import { STREAK_LABELS, STREAK_MIN } from "@/lib/labels";
+import { STREAK_LABELS, STREAK_MIN, GOAL_STREAK_MIN } from "@/lib/labels";
 import { matchScore, LoadingBlock, EmptyState, FormBadges } from "./ui-bits";
 import { Breadcrumbs, Crest, Avatar } from "./visuals";
 import { BallIcon } from "./EventIcons";
 import MatchTimeline from "./MatchTimeline";
 import MatchLineupsTab from "./MatchLineupsTab";
 
-/** «за последний матч» / «за последние 2 матча» / «за последние 5 матчей» */
+/** «за 1 матч» / «за 2 матча» / «за 5 матчей» — короткая нейтральная
+ *  форма (фидбек 2026-10-06: длинное «за последние 5 матчей» — убрать) */
 function lastMatchesWord(n: number): string {
-  if (n === 1) return "последний матч";
   const m10 = n % 10, m100 = n % 100;
-  const word = m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? "матча" : "матчей";
-  return `последние ${n} ${word}`;
+  const word = m10 === 1 && m100 !== 11 ? "матч" : m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14) ? "матча" : "матчей";
+  return `за ${n} ${word}`;
+}
+
+/** «матч подряд» / «матча подряд» / «матчей подряд» — для серий 10+ */
+function streakWord(n: number): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "матч подряд";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "матча подряд";
+  return "матчей подряд";
 }
 
 interface EventRow {
@@ -44,6 +52,8 @@ interface EventRow {
 
 interface TeamInsightDTO {
   last5: { scored: number; conceded: number; matches: number } | null;
+  /** серии «забывает/пропускает в каждом матче» (v1.0.46, порог показа 10+) */
+  streaks?: { scored: number; conceded: number } | null;
   rout: { goals: number; opponent: string; date: string; score: string } | null;
   collapse: { goals: number; opponent: string; date: string; score: string } | null;
 }
@@ -361,6 +371,35 @@ function ImportantBadge({ reason }: { reason?: string }) {
   );
 }
 
+/** Единый стиль строк статистики (фидбек 2026-10-06): «первая часть
+ *  темнее, сама статистика — светлым». Метка — text-ink3 (приглушена),
+ *  значение — text-ink/700 (ярко); note — приглушённый суффикс
+ *  (соперник/дата). Иконка слева — опционально. */
+function StatLine({
+  icon,
+  label,
+  value,
+  note,
+  title,
+  className,
+}: {
+  icon?: React.ReactNode;
+  label: React.ReactNode;
+  value: React.ReactNode;
+  note?: React.ReactNode;
+  title?: string;
+  className?: string;
+}) {
+  return (
+    <p className={cn("flex flex-wrap items-center gap-x-1.5 gap-y-0.5 px-0.5 py-1 text-xs", className)} title={title}>
+      {icon}
+      <span className="min-w-0 break-words text-ink3">{label}</span>
+      <span className="min-w-0 break-words font-bold text-ink">{value}</span>
+      {note != null && <span className="min-w-0 break-words text-ink3">{note}</span>}
+    </p>
+  );
+}
+
 // ================= Превью матча =================
 
 function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
@@ -376,46 +415,47 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
 
   return (
     <div className="space-y-3 p-3 sm:p-4">
-      {/* ---------- Дата, стадион, турнир (Р-19): одна полоса-список с
-          вертикальными разделителями — секция = [иконка 14px + лейбл
-          11px UPPERCASE серый] над [значение 13px белым]. Десктоп:
-          3 секции в одну строку равной высоты; мобильный: 3 строки
-          по 40px с горизонтальными разделителями. ---------- */}
+      {/* ---------- Дата, стадион, турнир (Р-19 → фидбек 2026-10-06):
+          каждая секция — ТРИ строки: [иконка + лейбл 10px UPPERCASE
+          серый] → [значение 15px/700 белым] → [подстрока 12px]. Дата —
+          ЦИФРАМИ (06.10.26), время — отдельной строкой (10:42 МСК).
+          Десктоп ≥768px: 3 секции в ряд; мобильный: 3 блока друг под
+          другом — всё коротко и с новой строки. ---------- */}
       <div className="grid grid-cols-1 overflow-hidden rounded-lg border border-sline/50 bg-s2/30 min-[768px]:grid-cols-3">
-        <div className="flex min-h-[40px] items-center gap-2.5 border-b border-sline/60 px-3 py-2 min-[768px]:border-b-0 min-[768px]:border-r">
-          <CalendarDays className="h-3.5 w-3.5 shrink-0 text-ink3" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.6px] text-ink3">Начало</p>
-            <p className="tabular text-[13px] font-semibold text-ink">
-              {fmtDate(m.kickoff, false)} · {timeStr} МСК
-            </p>
-          </div>
+        <div className="flex flex-col justify-center gap-0.5 border-b border-sline/60 px-3 py-2.5 min-[768px]:border-b-0 min-[768px]:border-r">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.6px] text-ink3">
+            <CalendarDays className="h-3.5 w-3.5 shrink-0" /> Начало
+          </p>
+          <p className="tabular text-[15px] font-bold leading-tight text-ink">{fmtShortDate(m.kickoff)}</p>
+          <p className="tabular text-xs text-ink2">{timeStr} МСК</p>
         </div>
-        <div className="flex min-h-[40px] items-center gap-2.5 border-b border-sline/60 px-3 py-2 min-[768px]:border-b-0 min-[768px]:border-r">
-          <MapPin className="h-3.5 w-3.5 shrink-0 text-ink3" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.6px] text-ink3">Стадион</p>
-            {m.stadium ? (
-              <button className="block min-w-0 text-left text-[13px] font-semibold text-ink hover:text-gold" onClick={() => navigate(`/stadium/${m.stadium!.id}`)}>
-                <span className="break-words">{m.stadium.name}</span>
-                {m.stadium.city && <span className="font-normal text-ink3"> · {m.stadium.city}</span>}
-              </button>
-            ) : (
-              <p className="text-[13px] text-ink3">не указан</p>
-            )}
-          </div>
-        </div>
-        <div className="flex min-h-[40px] items-center gap-2.5 px-3 py-2">
-          <Layers className="h-3.5 w-3.5 shrink-0 text-ink3" />
-          <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.6px] text-ink3">Турнир</p>
-            <button className="block min-w-0 text-left text-[13px] font-semibold text-ink hover:text-gold" onClick={() => navigate(`/league/${m.league.id}`)}>
-              <span className="break-words">
-                {m.isFriendly ? "Товарищеский матч" : `${m.round ? `${m.round}-й тур · ` : ""}${m.season?.name ?? ""}`}
-              </span>
-              <span className="block break-words text-xs font-normal text-ink3">{m.league.name}</span>
+        <div className="flex flex-col justify-center gap-0.5 border-b border-sline/60 px-3 py-2.5 min-[768px]:border-b-0 min-[768px]:border-r">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.6px] text-ink3">
+            <MapPin className="h-3.5 w-3.5 shrink-0" /> Стадион
+          </p>
+          {m.stadium ? (
+            <button className="block min-w-0 text-left" onClick={() => navigate(`/stadium/${m.stadium!.id}`)}>
+              <span className="block min-w-0 break-words text-[15px] font-bold leading-tight text-ink hover:text-gold">{m.stadium.name}</span>
+              {m.stadium.city && <span className="block break-words text-xs text-ink2">{m.stadium.city}</span>}
             </button>
-          </div>
+          ) : (
+            <p className="text-[15px] font-bold text-ink3">не указан</p>
+          )}
+        </div>
+        <div className="flex flex-col justify-center gap-0.5 px-3 py-2.5">
+          <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.6px] text-ink3">
+            <Layers className="h-3.5 w-3.5 shrink-0" /> Турнир
+          </p>
+          <button className="block min-w-0 text-left" onClick={() => navigate(`/league/${m.league.id}`)}>
+            <span className="block min-w-0 break-words text-[15px] font-bold leading-tight text-ink hover:text-gold">
+              {m.isFriendly ? "Товарищеский матч" : m.league.name}
+            </span>
+            {!m.isFriendly && (m.round || m.season?.name) && (
+              <span className="block break-words text-xs text-ink2">
+                {[m.round ? `${m.round}-й тур` : null, m.season?.name ?? null].filter(Boolean).join(" · ")}
+              </span>
+            )}
+          </button>
         </div>
       </div>
 
@@ -441,9 +481,17 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
                 <span className="min-w-0 flex-1 break-words text-sm font-semibold text-ink">{team.name}</span>
                 {row?.form && <FormBadges form={row.form.slice(-5)} size="sm" />}
               </button>
-              {/* мета — 12px серым, одна-две строки с переносом по словам */}
+              {/* мета — 12px серым, значения чуть светлее (двухтон,
+                фидбек 2026-10-06); одна-две строки с переносом */}
               <p className="px-3 pt-1 text-xs text-ink3">
-                {sig?.position != null ? `№${sig.position} в таблице · ${sig.points} очк. за ${sig.games} игр` : "дебют сезона"}
+                {sig?.position != null ? (
+                  <>
+                    №<span className="font-bold text-ink2">{sig.position}</span> в таблице ·{" "}
+                    <span className="font-bold text-ink2">{sig.points}</span> очк. за {sig.games} игр
+                  </>
+                ) : (
+                  "дебют сезона"
+                )}
               </p>
 
               <div className="space-y-1.5 px-3 pb-3 pt-2 text-xs">
@@ -468,38 +516,65 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
                   </p>
                 )}
                 {sig?.topScorer && (
-                  <p className="flex items-center gap-1.5 px-0.5 py-1 text-ink2">
-                    <BallIcon className="h-3.5 w-3.5" />
-                    <span className="min-w-0 break-words">бомбардир: {sig.topScorer.name} · {sig.topScorer.goals}</span>
-                  </p>
+                  <StatLine
+                    icon={<BallIcon className="h-3.5 w-3.5 shrink-0 text-gold" />}
+                    label="бомбардир:"
+                    value={`${sig.topScorer.name} · ${sig.topScorer.goals}`}
+                    title="Лучший бомбардир команды в сезоне"
+                  />
                 )}
-                {/* атака/оборона — только факты, в среднем за игру
-                    (фидбек 2026-09-29: «„— мощная атака“ опять всплыла —
-                    убрать похожие подписи, допустим „2,3 гола за игру“») */}
+                {/* атака/оборона — только факты, в среднем за игру; форма
+                    «за 5 матчей: 4,4 гола» (фидбек 2026-10-06: коротко и
+                    нейтрально); пропущено — ТОЛЬКО за нормой (среднее ≥ 3,
+                    фидбек: «не обязательно, если не выбивается за норму») */}
                 {insight.last5 && (
-                  <p className="flex flex-wrap items-center gap-x-2 gap-y-0.5 px-0.5 py-1 text-ink2">
-                    за {lastMatchesWord(insight.last5.matches)}:
-                    <span className="font-bold text-ink">
-                      {(insight.last5.scored / insight.last5.matches).toFixed(1).replace(".", ",")} гола за игру
-                    </span>
-                    <span className="text-ink3">·</span>
-                    <span className="font-bold text-ink">
-                      {(insight.last5.conceded / insight.last5.matches).toFixed(1).replace(".", ",")} пропущено
-                    </span>
-                  </p>
+                  <StatLine
+                    label={`${lastMatchesWord(insight.last5.matches)}:`}
+                    value={`${(insight.last5.scored / insight.last5.matches).toFixed(1).replace(".", ",")} гола`}
+                    note={
+                      insight.last5.conceded / insight.last5.matches >= 3
+                        ? `пропущено ${(insight.last5.conceded / insight.last5.matches).toFixed(1).replace(".", ",")}`
+                        : undefined
+                    }
+                    title="Средняя результативность за последние матчи"
+                  />
                 )}
-                {/* разгромы и провалы из истории */}
+                {/* серии «в каждом матче» — только 10+ (фидбек 2026-10-06) */}
+                {insight.streaks != null && insight.streaks.scored >= GOAL_STREAK_MIN && (
+                  <StatLine
+                    icon={<BallIcon className="h-3.5 w-3.5 shrink-0 text-gold" />}
+                    label="забивает:"
+                    value={`${insight.streaks.scored} ${streakWord(insight.streaks.scored)}`}
+                    title="Команда забивает в каждом матче — серия 10 и более"
+                  />
+                )}
+                {insight.streaks != null && insight.streaks.conceded >= GOAL_STREAK_MIN && (
+                  <StatLine
+                    icon={<ShieldAlert className="h-3.5 w-3.5 shrink-0 text-live" />}
+                    label="пропускает:"
+                    value={`${insight.streaks.conceded} ${streakWord(insight.streaks.conceded)}`}
+                    title="Команда пропускает в каждом матче — серия 10 и более"
+                  />
+                )}
+                {/* максимальы из истории — нейтрально и коротко (фидбек
+                    2026-10-06: «забивала/пропускала» — заменить) */}
                 {insight.rout && (
-                  <p className="flex items-center gap-1.5 px-0.5 py-1 text-ink2" title="Самый результативный матч команды">
-                    <Trophy className="h-3.5 w-3.5 text-gold" />
-                    забивала {insight.rout.score} — {insight.rout.opponent} ({fmtShortDate(insight.rout.date)})
-                  </p>
+                  <StatLine
+                    icon={<Trophy className="h-3.5 w-3.5 shrink-0 text-gold" />}
+                    label="макс. забито:"
+                    value={insight.rout.score}
+                    note={`— ${insight.rout.opponent} (${fmtShortDate(insight.rout.date)})`}
+                    title="Самый результативный матч команды"
+                  />
                 )}
                 {insight.collapse && (
-                  <p className="flex items-center gap-1.5 px-0.5 py-1 text-ink2" title="Самое крупное поражение команды">
-                    <ShieldAlert className="h-3.5 w-3.5 text-live" />
-                    пропускала {insight.collapse.score} от {insight.collapse.opponent} ({fmtShortDate(insight.collapse.date)})
-                  </p>
+                  <StatLine
+                    icon={<ShieldAlert className="h-3.5 w-3.5 shrink-0 text-live" />}
+                    label="макс. пропущено:"
+                    value={insight.collapse.score}
+                    note={`— ${insight.collapse.opponent} (${fmtShortDate(insight.collapse.date)})`}
+                    title="Больше всех пропущено в одном матче"
+                  />
                 )}
               </div>
 

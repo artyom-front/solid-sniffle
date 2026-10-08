@@ -466,6 +466,26 @@ model StatBlock {
   updatedAt DateTime @updatedAt
 }
 
+/// Брендинг сайта (v1.0.48): логотип и иконка браузера, управляемые из
+/// админки («Сайт → Брендинг»), применяются по всему сайту БЕЗ редеплоя.
+/// ОДНА строка с фиксированным id="site" (upsert). URL указывают на Media
+/// (/api/media/<id>, bytea — переживает пересоздание контейнера и уходит
+/// в бэкапы). NULL = встроенный лого v1.0.47 (LogoVertical: «scores» над
+/// «b[поле]x», SVG-пути) и встроенный знак-поле (фавикон).
+/// КАЖДАЯ загрузка = НОВЫЙ Media id = НОВЫЙ URL → immutable-кэш медиа
+/// не мешает: браузер сам подхватывает свежую картинку по новой ссылке.
+model BrandSetting {
+  id String @id @default("site")
+  /// Логотип для ТЁМНОГО фона: шапка/футер сайта, страницы входа
+  logoDarkUrl  String?
+  /// Логотип для СВЕТЛОГО фона: сайдбар панели управления.
+  /// NULL → на светлом фоне показывается logoDarkUrl
+  logoLightUrl String?
+  /// Иконка браузера (favicon, apple-touch). NULL — встроенный знак-поле
+  iconUrl      String?
+  updatedAt    DateTime @updatedAt
+}
+
 /// Инвариант №4: журнал аудита всех пост-фактум изменений
 model AuditLog {
   id        String   @id @default(cuid())

@@ -16,6 +16,7 @@ import { errorResponse } from "@/lib/http";
 import { normalizeRoles, refereeFromRoles, hasRefereeCorpsRole } from "@/lib/roles";
 import { assertPlayerRegistrationAllowed } from "@/lib/engine/conflicts";
 import { REGISTRATION_ROLE_CODES } from "@/lib/registration-roles";
+import { assertSeasonInScope } from "@/lib/scope";
 import type { Prisma } from "@prisma/client";
 
 type Row = Record<string, string>;
@@ -63,6 +64,10 @@ export async function POST(req: Request) {
       if (isClubAdmin && team.clubId !== user.clubId) {
         throw new HttpError(403, "Клубный администратор может заводить заявки только в команды своего клуба");
       }
+      // SECURITY (аудит Task 56, P1): скоуп-админ лиги импортирует заявки
+      // только в сезоны СВОЕЙ лиги — раньше seasonId не проверялся и заявки
+      // уезжали в чужие лиги (в одиночном registrations POST проверка есть).
+      await assertSeasonInScope(user, seasonId);
     }
 
     // ---------- разбор CSV ----------

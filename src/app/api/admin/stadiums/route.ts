@@ -36,7 +36,14 @@ export async function POST(req: Request) {
       name: String(name).trim(),
       city: city || null,
       address: address || null,
-      capacity: capacity ? Number(capacity) : null,
+      // v1.0.49 (аудит Task 56): вместимость — целое ≥ 0 или null;
+      // раньше NaN → Prisma 500, отрицательное молча писалось в БД
+      capacity: (() => {
+        if (capacity === undefined || capacity === null || capacity === "") return null;
+        const n = Number(capacity);
+        if (!Number.isInteger(n) || n < 0) throw new HttpError(422, "Вместимость: целое неотрицательное число (мест)");
+        return n;
+      })(),
       photoUrl: typeof photoUrl === "string" && photoUrl.startsWith("/api/media/") ? photoUrl : null,
     };
     const stadium = await db.stadium.create({ data });
