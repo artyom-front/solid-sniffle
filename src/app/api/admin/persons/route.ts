@@ -3,6 +3,7 @@
 // v1.0.34: поиск — регистронезависимый (фамилия/имя/отчество), список —
 // постраничный (page/pageSize, в ответе total) — раньше 200 записей молча
 // обрезались и «Мамонтов» был за пределами выборки.
+// v1.0.49: ?officials=1 — корпус назначений для бригады матча (без пагинации).
 // Защита от дублей: при совпадении ФИО+даты рождения — 409 со списком кандидатов
 // (создание возможно только с force: true; объединить позже — «Merge профилей»).
 
@@ -10,7 +11,7 @@ import { db } from "@/lib/db";
 import { requireRole, HttpError } from "@/lib/auth";
 import { errorResponse } from "@/lib/http";
 import { audit } from "@/lib/engine/lifecycle";
-import { normalizeRoles, refereeFromRoles } from "@/lib/roles";
+import { normalizeRoles, refereeFromRoles, MATCH_OFFICIAL_ROLE_CODES } from "@/lib/roles";
 import { caseVariants } from "@/lib/text";
 
 const POSITIONS = ["GK", "DF", "MF", "FW"];
@@ -28,15 +29,24 @@ export async function GET(req: Request) {
     // v1.0.34 · ПАГИНАЦИЯ: страница от 1, размер 20–200 (дефолт 50).
     // Раньше список молча обрезался на 200 записей — «выдаётся только до
     // буквы К, а Мамонтова не видно»; теперь в ответе total и постранично.
-    const page = Math.max(1, Number(searchParams.get("page")) || 1);
-    const pageSize = Math.min(200, Math.max(20, Number(searchParams.get("pageSize")) || 50));
-    const skip = (page - 1) * pageSize;
+    const officialsOnly = searchParams.get("officials") === "1";
+    // v1.0.49 · КОРПУС НАЗНАЧЕНИЙ: ?officials=1 — только кандидаты в
+    // бригаду матча (судейский корпус + врач), БЕЗ пагинации (take 500).
+    // ГРАБЛИ v1.0.34→49: диалог матча фетчил список персон без параметров
+    // и фильтровал судей на клиенте — пагинация (дефолт 50) молча
+    // обрезала корпус: при >50 персон в дропдауне «Главный судья»
+    // оставались только судьи с фамилиями на первые буквы алфавита
+    // («выбрать можно только Алексееву»). Фильтр переносится на сервер —
+    // корпус мал по определению, ему пагинация не нужна.
+    const page = officialsOnly ? 1 : Math.max(1, Number(searchParams.get("page")) || 1);
+    const pageSize = officialsOnly ? 500 : Math.min(200, Math.max(20, Number(searchParams.get("pageSize")) || 50));
+    const skip = officialsOnly ? 0 : (page - 1) * pageSize;
 
     // ГРАБЛЯ alpine-postgres (locale=C/SQL_ASCII): mode:"insensitive"
     // НЕ складывает кириллицу — «мамонтов» не находил «Мамонтов».
     // Регистр сворачиваем в JS и ищем ПО ВАРИАНТАМ (см. lib/text.ts).
     const variants = caseVariants(q);
-    const where = variants.length
+    const searchWhere = variants.length
       ? {
           OR: variants.flatMap((v) => [
             { lastName: { contains: v, mode: "insensitive" as const } },
@@ -45,6 +55,17 @@ export async function GET(req: Request) {
           ]),
         }
       : {};
+    // корпус назначений: isReferee (миграция 05 + normalizeRoles) либо
+    // любая легаси-должность в ролях; врач — тоже кандидат (бригада матча)
+    const officialsWhere = {
+      OR: [
+        { isReferee: true },
+        { roles: { hasSome: [...MATCH_OFFICIAL_ROLE_CODES] } },
+      ],
+    };
+    const where = officialsOnly
+      ? (variants.length ? { AND: [searchWhere, officialsWhere] } : officialsWhere)
+      : searchWhere;
 
     const [persons, total] = await Promise.all([
       db.person.findMany({

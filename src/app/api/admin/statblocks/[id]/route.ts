@@ -24,7 +24,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
 
 export async function DELETE(_req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
-    const user = await requireRole("LEAGUE_ADMIN", "SUPER_ADMIN");
+    // v1.0.49 (аудит Task 56): контент сайта — СТРОГО SUPER_ADMIN, как в
+    // GET/POST/PATCH этого же роута; LEAGUE_ADMIN здесь был регрессом v1.0.42
+    const user = await requireRole("SUPER_ADMIN");
     const { id } = await ctx.params;
     const block = await db.statBlock.findUnique({ where: { id } });
     if (!block) throw new HttpError(404, "Стат-карточка не найдена");

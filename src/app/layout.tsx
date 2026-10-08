@@ -7,6 +7,8 @@ import type { Metadata, Viewport } from "next";
 import { Onest, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
+import { getBranding } from "@/lib/services/branding";
+import { DEFAULT_ICON_URL, DEFAULT_APPLE_ICON_URL } from "@/lib/branding";
 
 const onest = Onest({
   variable: "--font-onest",
@@ -20,8 +22,23 @@ const geistMono = Geist_Mono({
 
 const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 
-export const metadata: Metadata = {
-  metadataBase: new URL(SITE_URL),
+// v1.0.48: generateMetadata вместо статического export — ИКОНКИ ВКЛАДКИ
+// БРАУЗЕРА теперь управляются из админки («Сайт → Брендинг»): пока админ
+// не загрузил свой фавикон, <link rel=icon> указывает на встроенный
+// знак-поле; file-conventions app/icon.svg и app/apple-icon.png УДАЛЕНЫ
+// (иначе конкурировали бы с metadata.icons) — одна точка правды.
+// Кастомный фавикон = /api/media/<id>, смена применяется через
+// revalidatePath (вызывает /api/admin/brand) — ISR-страницы не ждём 60 с.
+export async function generateMetadata(): Promise<Metadata> {
+  const brand = await getBranding();
+  const icons: Metadata["icons"] = brand.iconUrl
+    ? { icon: [{ url: brand.iconUrl }], apple: [{ url: brand.iconUrl }] }
+    : {
+        icon: [{ url: DEFAULT_ICON_URL, type: "image/svg+xml" }],
+        apple: [{ url: DEFAULT_APPLE_ICON_URL, sizes: "240x240" }],
+      };
+  return {
+    metadataBase: new URL(SITE_URL),
   title: {
     default: "SCORESBOX — футбол Чувашии онлайн: турниры, статистика, результаты",
     template: "%s · SCORESBOX",
@@ -31,24 +48,32 @@ export const metadata: Metadata = {
   keywords: ["футбол", "Чувашия", "результаты матчей", "livescore", "турнирная таблица", "мини-футбол", "статистика", "дисквалификации", "scoresbox"],
   applicationName: "SCORESBOX",
   alternates: { canonical: "/" },
+  icons,
   openGraph: {
     title: "SCORESBOX — футбол Чувашии онлайн",
     description: "Все турниры Чувашии в реальном времени: матчи, таблицы, бомбардиры, судьи",
     siteName: "SCORESBOX",
     locale: "ru_RU",
     type: "website",
+    // v1.0.47: соцсети показывают карточку с лого (SEO-аудит 2026-10-06:
+    // twitter card был summary_large_image БЕЗ картинки). 1200×630,
+    // генерируется scripts/make-brand-assets.mjs из канонических SVG
+    // (public/brand/logo47/og.svg — пути, make-logo47.py)
+    images: [{ url: "/og-image.png", width: 1200, height: 630, alt: "SCORESBOX — футбол Чувашии онлайн" }],
   },
   twitter: {
     card: "summary_large_image",
     title: "SCORESBOX — футбол Чувашии онлайн",
     description: "Все турниры Чувашии в реальном времени: матчи, таблицы, бомбардиры, судьи",
+    images: ["/og-image.png"],
   },
   robots: {
     index: true,
     follow: true,
     googleBot: { index: true, follow: true, "max-image-preview": "large", "max-snippet": -1 },
   },
-};
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#0A0D13",

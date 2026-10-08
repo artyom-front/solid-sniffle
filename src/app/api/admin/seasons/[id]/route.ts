@@ -20,8 +20,17 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (!String(body.name).trim()) throw new HttpError(422, "Название не может быть пустым");
       data.name = String(body.name).trim();
     }
-    if (body.startDate !== undefined) data.startDate = new Date(String(body.startDate));
-    if (body.endDate !== undefined) data.endDate = body.endDate ? new Date(String(body.endDate)) : null;
+    // v1.0.49 (аудит Task 56): битая дата — честная 422, а не Invalid Date → 500
+    if (body.startDate !== undefined) {
+      const d = new Date(String(body.startDate));
+      if (Number.isNaN(d.getTime())) throw new HttpError(422, "Некорректная дата начала сезона");
+      data.startDate = d;
+    }
+    if (body.endDate !== undefined) {
+      const d = body.endDate ? new Date(String(body.endDate)) : null;
+      if (d && Number.isNaN(d.getTime())) throw new HttpError(422, "Некорректная дата окончания сезона");
+      data.endDate = d;
+    }
     if (body.isCurrent !== undefined) {
       data.isCurrent = !!body.isCurrent;
       if (data.isCurrent) {

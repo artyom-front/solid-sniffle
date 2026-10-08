@@ -21,11 +21,17 @@ export async function POST(req: Request) {
     const league = await db.league.findUnique({ where: { id: leagueId } });
     if (!league) throw new HttpError(404, "Лига не найдена");
 
+    // v1.0.49 (аудит Task 56): битая дата — честная 422, а не Invalid Date → 500
+    const parsedStart = new Date(String(startDate));
+    if (Number.isNaN(parsedStart.getTime())) throw new HttpError(422, "Некорректная дата начала сезона");
+    const parsedEnd = endDate ? new Date(String(endDate)) : null;
+    if (parsedEnd && Number.isNaN(parsedEnd.getTime())) throw new HttpError(422, "Некорректная дата окончания сезона");
+
     const data = {
       leagueId,
       name: String(name).trim(),
-      startDate: new Date(String(startDate)),
-      endDate: endDate ? new Date(String(endDate)) : null,
+      startDate: parsedStart,
+      endDate: parsedEnd,
       isCurrent: !!isCurrent,
     };
 

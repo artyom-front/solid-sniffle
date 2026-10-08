@@ -2,7 +2,7 @@
 
 // Разделы панели управления: КДК, расписание, заявки, Merge профилей, аудит
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -256,10 +256,20 @@ export function RegistrationsPanel({ seasonId, bump, version = 0, onOpenTeam, on
   const [role, setRole] = useState("PLAYER");
   const [endPrevious, setEndPrevious] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [queryInput, setQueryInput] = useState("");
   const [query, setQuery] = useState("");
   const [regBusy, setRegBusy] = useState<string | null>(null);
 
-  const { data } = useFetch<RegData>(seasonId ? `/api/admin/persons?seasonId=${seasonId}` : null, version);
+  // v1.0.49 · ПОИСК НА СЕРВЕРЕ (грабли пагинации v1.0.34: раньше фетчились
+  // первые 50 персон и фильтровались на клиенте — игроков «за алфавитом»
+  // было НЕВОЗМОЖНО заявить). Теперь ввод уходит в ?q с дебаунсом 300 мс,
+  // сервер ищет по вариантам регистра (грабля locale-C), отдаёт до 200.
+  useEffect(() => {
+    const t = setTimeout(() => setQuery(queryInput.trim()), 300);
+    return () => clearTimeout(t);
+  }, [queryInput]);
+
+  const { data } = useFetch<RegData>(seasonId ? `/api/admin/persons?seasonId=${seasonId}&pageSize=200${query ? `&q=${encodeURIComponent(query)}` : ""}` : null, version);
   const { data: teamsData } = useFetch<{ teams: { id: string; name: string }[] }>(seasonId ? `/api/public/teams?seasonId=${seasonId}` : null, version);
   const { data: regsData, loading: regsLoading } = useFetch<{ registrations: RegListItem[] }>(seasonId ? `/api/admin/registrations?seasonId=${seasonId}` : null, version);
   const [teamId, setTeamId] = useState("");
@@ -318,14 +328,14 @@ export function RegistrationsPanel({ seasonId, bump, version = 0, onOpenTeam, on
         <CardContent className="grid gap-3 lg:grid-cols-4">
           <div className="space-y-1">
             <Label className="text-xs">Поиск игрока</Label>
-            <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Фамилия..." className="bg-white" />
+            <Input value={queryInput} onChange={(e) => { setQueryInput(e.target.value); setPersonId(""); }} placeholder="Фамилия или имя... (поиск по всей базе)" className="bg-white" />
           </div>
           <div className="space-y-1">
             <Label className="text-xs">Игрок</Label>
             <Select value={personId} onValueChange={setPersonId}>
               <SelectTrigger className="bg-white"><SelectValue placeholder="Выбрать" /></SelectTrigger>
               <SelectContent className="max-h-72">
-                {persons.slice(0, 100).map((p) => (
+                {persons.slice(0, 200).map((p) => (
                   <SelectItem key={p.id} value={p.id}>{p.name}{p.isReferee ? " · судья" : ""}{p.teams.length ? ` (${p.teams.join(", ")})` : " — без команды"}</SelectItem>
                 ))}
               </SelectContent>

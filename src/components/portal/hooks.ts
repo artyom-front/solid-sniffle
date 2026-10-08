@@ -41,7 +41,13 @@ export function useFetch<T>(url: string | null, version = 0, initial?: T | null)
   return { data, loading, error, reload: load };
 }
 
-/** POST/PATCH JSON-запрос; возвращает { ok, data | error } */
+/** POST/PATCH/PUT/DELETE JSON-запрос; возвращает { ok, data | error }.
+ *  v1.0.49: тело ответа отдаётся КАК ЕСТЬ и при ошибке — API кладёт
+ *  рядом с error машинночитаемую нагрузку (409-дубли: duplicates;
+ *  SmartDelete: code/dependencies/cascadeAllowed), и UI-диалоги
+ *  «это другой человек — создать всё равно» и «удалить вместе с
+ *  заявками» зависят от неё. Раньше тело при !ok выбрасывалось —
+ *  все структурированные 409 деградировали в голый toast. */
 export async function apiPost<T = unknown>(url: string, body: unknown, method = "POST"): Promise<{ ok: boolean; data?: T; error?: string }> {
   try {
     const r = await fetch(url, {
@@ -50,7 +56,7 @@ export async function apiPost<T = unknown>(url: string, body: unknown, method = 
       body: JSON.stringify(body),
     });
     const j = await r.json().catch(() => ({}));
-    if (!r.ok) return { ok: false, error: j?.error || `Ошибка ${r.status}` };
+    if (!r.ok) return { ok: false, error: j?.error || `Ошибка ${r.status}`, data: j as T };
     return { ok: true, data: j as T };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : "Сетевая ошибка" };

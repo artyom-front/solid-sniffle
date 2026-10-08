@@ -11,7 +11,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useFetch, fmtDate } from "./hooks";
 import { navigate } from "./router";
-import type { OverviewDTO, SessionUserDTO } from "./types";
+import type { BrandingDTO, OverviewDTO, SessionUserDTO } from "./types";
 import { ROLE_LABELS } from "@/lib/labels";
 import { ScoreBox, StatusBadge } from "./ui-bits";
 import { initials } from "./visuals";
@@ -20,7 +20,7 @@ import ProtocolEditor from "./ProtocolEditor";
 import { KdcPanel, SchedulePanel, RegistrationsPanel, MergePanel, AuditPanel } from "./AdminPanels";
 import { TournamentsPanel, ClubsTeamsPanel } from "./CrudPanels";
 import { PeoplePanel, StadiumsPanel, BannersPanel } from "./CrudPanels2";
-import { StatBlocksPanel, FormatsPanel } from "./SiteContentPanels";
+import { StatBlocksPanel, FormatsPanel, BrandingPanel } from "./SiteContentPanels";
 import TeamDetailPanel from "./TeamDetailPanel";
 import PersonDetailPanel from "./PersonDetailPanel";
 import { MatchesCrudPanel } from "./MatchesCrudPanel";
@@ -28,13 +28,13 @@ import { ImportPanel } from "./ImportPanel";
 import { UsersPanel } from "./UsersPanel";
 import SecurityPanel from "./SecurityPanel";
 import AdminDashboard, { DashboardData } from "./AdminDashboard";
-import { Logo } from "./Logo";
+import { BrandLogo } from "./Logo";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import {
   LayoutDashboard, Trophy, Shield, Users, MapPin, CalendarPlus, ClipboardPen, Ban, Megaphone,
-  ArrowRightLeft, GitMerge, ScrollText, Bell, Search, LogOut, Home, Menu, CalendarClock, Flag, KeyRound,
+  ArrowRightLeft, GitMerge, ScrollText, Bell, Search, LogOut, Home, Menu, CalendarClock, Flag, KeyRound, Palette,
   FileSpreadsheet, Users2, Info, BarChart3, Shapes,
 } from "lucide-react";
 
@@ -56,6 +56,9 @@ interface Props {
   version: number;
   bump: () => void;
   onReload: () => void;
+  /** v1.0.48: кастомные лого из «Сайт → Брендинг» (сайдбар панели);
+   *  NULL — встроенная вертикаль v1.0.47 */
+  branding?: BrandingDTO | null;
   focusMatchId: string | null;
   onMatchHandled: () => void;
   /** позиция из URL (SPA-навигация/back/forward/deep-link: section/
@@ -72,7 +75,7 @@ interface Props {
 }
 
 type Section =
-  | "dashboard" | "tournaments" | "teams" | "people" | "stadiums" | "matches" | "banners" | "statblocks" | "formats"
+  | "dashboard" | "tournaments" | "teams" | "people" | "stadiums" | "matches" | "banners" | "statblocks" | "formats" | "branding"
   | "protocol" | "kdc" | "schedule" | "registrations" | "import" | "merge" | "audit" | "security" | "users";
 
 const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ className?: string }>; group: string; roles: string[] }[] = [
@@ -92,6 +95,8 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ classN
   { id: "banners", label: "Баннеры сайта", icon: Megaphone, group: "Сайт", roles: ["SUPER_ADMIN"] },
   { id: "statblocks", label: "Стат-карточки", icon: BarChart3, group: "Сайт", roles: ["SUPER_ADMIN"] },
   { id: "formats", label: "Виды футбола", icon: Shapes, group: "Сайт", roles: ["SUPER_ADMIN"] },
+  // v1.0.48: лого и иконка браузера меняются без редеплоя — SUPER_ADMIN
+  { id: "branding", label: "Брендинг сайта", icon: Palette, group: "Сайт", roles: ["SUPER_ADMIN"] },
   { id: "merge", label: "Merge профилей", icon: GitMerge, group: "Система", roles: ["SUPER_ADMIN"] },
   { id: "users", label: "Пользователи", icon: Users2, group: "Система", roles: ["SUPER_ADMIN"] },
   { id: "security", label: "Безопасность", icon: KeyRound, group: "Система", roles: ["REFEREE", "CLUB_ADMIN", "LEAGUE_ADMIN", "SUPER_ADMIN"] },
@@ -100,7 +105,7 @@ const SECTIONS: { id: Section; label: string; icon: React.ComponentType<{ classN
 
 const NEEDS_SEASON: Section[] = ["protocol", "kdc", "schedule", "registrations"];
 
-export default function AdminShell({ user, version, bump, onReload, focusMatchId, onMatchHandled, urlPosition }: Props) {
+export default function AdminShell({ user, version, bump, onReload, branding, focusMatchId, onMatchHandled, urlPosition }: Props) {
   const router = useRouter();
   // v1.0.32: восстановление позиции после F5 — секция/лига/сезон читаются
   // из URL и синхронизируются обратно (обновление страницы больше не
@@ -323,6 +328,8 @@ export default function AdminShell({ user, version, bump, onReload, focusMatchId
         return <StatBlocksPanel bump={bump} onReload={onReload} version={version} />;
       case "formats":
         return <FormatsPanel bump={bump} onReload={onReload} version={version} />;
+      case "branding":
+        return <BrandingPanel bump={bump} onReload={onReload} version={version} />;
       case "matches":
         return (
           <MatchesCrudPanel
@@ -360,7 +367,8 @@ export default function AdminShell({ user, version, bump, onReload, focusMatchId
       {/* ---------- Сайдбар (десктоп) ---------- */}
       <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r border-zinc-200 bg-white lg:flex">
         <button className="flex items-center gap-2.5 border-b border-zinc-200 px-5 py-4" onClick={() => navigate("/")} aria-label="На сайт">
-          <Logo glyph={32} wordmarkClassName="text-base" subtitle="панель управления" subtitleClassName="mt-0.5 text-xs font-medium" />
+          {/* v1.0.48: двухъярусный лого (или кастомный из «Брендинг») */}
+          <BrandLogo branding={branding} variant="light" height={42} subtitle="панель управления" subtitleClassName="mt-0.5 text-xs font-medium" />
         </button>
 
         {nav()}
@@ -401,7 +409,7 @@ export default function AdminShell({ user, version, bump, onReload, focusMatchId
             <SheetContent side="left" className="w-72 gap-0 p-0">
               <SheetTitle className="sr-only">Меню админки</SheetTitle>
               <div className="flex items-center gap-2.5 border-b border-zinc-200 px-5 py-4">
-                <Logo glyph={28} wordmarkClassName="text-base" />
+                <BrandLogo branding={branding} variant="light" height={38} />
               </div>
               {nav(() => setMobileNav(false))}
             </SheetContent>

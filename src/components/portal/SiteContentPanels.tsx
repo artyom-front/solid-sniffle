@@ -7,20 +7,25 @@
 //   • FormatsPanel — виды футбола в меню сайта: добавить/убрать/
 //     переименовать/скрыть/сортировать (стандарт 11×11, футзал 5×5,
 //     ЛФЛ 8×8 и разновидности — по ситуации).
+//   • BrandingPanel (v1.0.48) — логотипы и иконка браузера: загрузка
+//     PNG/JPG/WebP/AVIF/SVG, сброс к встроенным. Применяется по всему
+//     сайту сразу (revalidatePath) — без редеплоя.
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { BarChart3, Pencil, Plus, Shapes, Eye, EyeOff } from "lucide-react";
+import { BarChart3, Pencil, Plus, Shapes, Eye, EyeOff, Palette, Moon, Sun, AppWindow, Loader2, RotateCcw, UploadCloud } from "lucide-react";
 import { apiPost, useFetch } from "./hooks";
 import { EmptyState, LoadingBlock } from "./ui-bits";
 import { Field, DeleteBtn } from "./CrudPanels";
 import { MediaUpload } from "./MediaUpload";
+import { LogoVertical, LogoMark } from "./Logo";
 import { cn } from "@/lib/utils";
+import type { BrandingDTO } from "./types";
 
 interface CrudProps {
   bump: () => void;
@@ -359,6 +364,243 @@ export function FormatsPanel({ bump, onReload, version = 0 }: CrudProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ============================================================
+// Брендинг сайта (v1.0.48): логотипы + иконка браузера.
+// Каждая загрузка ПРИМЕНЯЕТСЯ СРАЗУ (POST /api/admin/brand →
+// revalidatePath) — отдельной кнопки «Сохранить» нет. Файл кладётся
+// в Media КАК ЕСТЬ (SVG не конвертируется, фавикон не WebP-ится),
+// каждая загрузка = НОВЫЙ URL → браузерный кэш сбрасывается сам.
+// Сброс «к стандартному» — PATCH с null.
+// ============================================================
+
+type BrandKindClient = "logoDark" | "logoLight" | "icon";
+
+const BRAND_ACCEPTS: Record<BrandKindClient, string> = {
+  logoDark: ".png,.jpg,.jpeg,.webp,.avif,.svg",
+  logoLight: ".png,.jpg,.jpeg,.webp,.avif,.svg",
+  icon: ".png,.svg,.ico,.jpg,.jpeg,.webp,.avif",
+};
+
+/** Один ассет брендинга: превью «где живёт» + загрузка/сброс */
+function BrandAssetBlock({
+  kind,
+  title,
+  where,
+  hint,
+  url,
+  busy,
+  onUpload,
+  onReset,
+  preview,
+}: {
+  kind: BrandKindClient;
+  title: string;
+  where: string;
+  hint?: string;
+  url: string | null;
+  busy: BrandKindClient | null;
+  onUpload: (kind: BrandKindClient, file: File) => void;
+  onReset: (kind: BrandKindClient) => void;
+  /** превью на «плашке» фона — тёмной или светлой */
+  preview: React.ReactNode;
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const isBusy = busy === kind;
+  return (
+    <div className="rounded-xl border border-zinc-200 bg-white p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <h4 className="text-sm font-bold text-zinc-800">{title}</h4>
+        {url ? (
+          <Badge variant="secondary" className="bg-amber-50 text-amber-700">кастомный</Badge>
+        ) : (
+          <Badge variant="secondary" className="bg-emerald-50 text-emerald-700">стандартный</Badge>
+        )}
+        <span className="ml-auto text-[11px] text-zinc-400">{where}</span>
+      </div>
+
+      <div className="mb-3">{preview}</div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <input
+          ref={inputRef}
+          type="file"
+          accept={BRAND_ACCEPTS[kind]}
+          className="hidden"
+          onChange={(e) => {
+            const f = e.target.files?.[0];
+            if (f) onUpload(kind, f);
+            e.target.value = "";
+          }}
+        />
+        <Button
+          type="button"
+          size="sm"
+          disabled={isBusy}
+          onClick={() => inputRef.current?.click()}
+          className="h-8 bg-emerald-600 hover:bg-emerald-700"
+        >
+          {isBusy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <UploadCloud className="mr-1 h-3.5 w-3.5" />}
+          {url ? "Заменить файл" : "Загрузить свой"}
+        </Button>
+        {url && (
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            disabled={isBusy}
+            onClick={() => onReset(kind)}
+            className="h-8 border-zinc-200 text-zinc-600 hover:bg-zinc-50"
+          >
+            <RotateCcw className="mr-1 h-3.5 w-3.5" /> Сбросить к стандартному
+          </Button>
+        )}
+      </div>
+      {hint && <p className="mt-2 text-[11px] leading-relaxed text-zinc-400">{hint}</p>}
+    </div>
+  );
+}
+
+export function BrandingPanel({ bump, onReload, version = 0 }: CrudProps) {
+  const { data, loading, reload } = useFetch<{ branding: BrandingDTO }>("/api/admin/brand", version);
+  const [busy, setBusy] = useState<BrandKindClient | null>(null);
+  const branding = data?.branding ?? null;
+
+  const upload = async (kind: BrandKindClient, file: File) => {
+    setBusy(kind);
+    try {
+      const fd = new FormData();
+      fd.append(kind, file);
+      const r = await fetch("/api/admin/brand", { method: "POST", body: fd });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) return toast.error(j?.error || `Ошибка загрузки (${r.status})`);
+      toast.success("Применено — лого обновился по всему сайту");
+      void reload();
+      bump();
+      onReload();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Сетевая ошибка");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const reset = async (kind: BrandKindClient) => {
+    setBusy(kind);
+    const res = await apiPost<{ branding: BrandingDTO }>("/api/admin/brand", { [`${kind}Url`]: null }, "PATCH");
+    setBusy(null);
+    if (!res.ok) return toast.error(res.error);
+    toast.success("Вернули стандартный");
+    void reload();
+    bump();
+    onReload();
+  };
+
+  if (loading && !data) return <LoadingBlock />;
+
+  const logoDarkPreview = (
+    <div className="flex h-28 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-zinc-900">
+      {branding?.logoDarkUrl ? (
+        <img src={branding.logoDarkUrl} alt="Логотип (тёмный фон)" className="max-h-20 max-w-[240px] object-contain" />
+      ) : (
+        <LogoVertical size={108} variant="dark" />
+      )}
+    </div>
+  );
+
+  const logoLightPreview = (
+    <div className="flex h-28 items-center justify-center overflow-hidden rounded-lg border border-zinc-200 bg-white">
+      {branding?.logoLightUrl ?? branding?.logoDarkUrl ? (
+        <img src={(branding?.logoLightUrl ?? branding?.logoDarkUrl) as string} alt="Логотип (светлый фон)" className="max-h-20 max-w-[240px] object-contain" />
+      ) : (
+        <LogoVertical size={108} variant="light" />
+      )}
+    </div>
+  );
+
+  const iconPreview = (
+    <div className="space-y-2">
+      {/* мокап вкладки браузера — как иконка выглядит в реальности */}
+      <div className="flex items-end">
+        <div className="flex items-center gap-1.5 rounded-t-lg border border-b-0 border-zinc-300 bg-zinc-100 px-2.5 py-1.5">
+          {branding?.iconUrl ? (
+            <img src={branding.iconUrl} alt="Иконка" className="h-4 w-4 object-contain" />
+          ) : (
+            <LogoMark size={16} simple />
+          )}
+          <span className="text-[11px] font-medium text-zinc-600">scoresbox.ru</span>
+        </div>
+      </div>
+      <div className="flex h-16 items-center gap-4 overflow-hidden rounded-lg border border-zinc-200 bg-zinc-50 px-3">
+        {branding?.iconUrl ? (
+          <>
+            <img src={branding.iconUrl} alt="Иконка 48" className="h-12 w-12 object-contain" />
+            <img src={branding.iconUrl} alt="Иконка 32" className="h-8 w-8 object-contain" />
+            <img src={branding.iconUrl} alt="Иконка 16" className="h-4 w-4 object-contain" />
+          </>
+        ) : (
+          <>
+            <LogoMark size={48} simple />
+            <LogoMark size={32} simple />
+            <LogoMark size={16} simple />
+            <span className="text-[11px] text-zinc-400">32px в вкладке · 16px при малой высоте</span>
+          </>
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="space-y-4">
+      <div>
+        <h3 className="flex items-center gap-1.5 text-base font-bold"><Palette className="h-4 w-4 text-emerald-600" /> Брендинг сайта</h3>
+        <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+          Логотип и иконка браузера применяются <b>по всему сайту сразу после загрузки</b> — страницы
+          перегенерируются автоматически. Пока ничего не загружено, используется встроенный
+          двухъярусный логотип «scores / b[поле]x» (v1.0.47). Каждая замена = новая ссылка,
+          закэшированные картинки не мешают.
+        </p>
+      </div>
+      {data && (
+        <>
+          <BrandAssetBlock
+            kind="logoDark"
+            title="Логотип — тёмный фон"
+            where="шапка и футер сайта · страницы входа"
+            hint="PNG/JPG/WebP/AVIF/SVG, до 2 МБ, желательно шире 200px и с прозрачным фоном. Пропорции сохраняются, высота на сайте ~44px."
+            url={branding?.logoDarkUrl ?? null}
+            busy={busy}
+            onUpload={upload}
+            onReset={reset}
+            preview={logoDarkPreview}
+          />
+          <BrandAssetBlock
+            kind="logoLight"
+            title="Логотип — светлый фон"
+            where="сайдбар панели управления"
+            hint="Необязательно: если не загружен, на светлом фоне показывается тёмный вариант. Загрузите, если ваш основной лого белый и «исчезает» на белом."
+            url={branding?.logoLightUrl ?? null}
+            busy={busy}
+            onUpload={upload}
+            onReset={reset}
+            preview={logoLightPreview}
+          />
+          <BrandAssetBlock
+            kind="icon"
+            title="Иконка браузера (фавикон)"
+            where="вкладка браузера · закладки · iOS"
+            hint="Квадратный PNG/SVG/ICO, до 1 МБ. Лучше 180×180 и больше (iOS-закладки). Иконка вкладки обновляется после обновления страницы — вкладку reopen не нужен."
+            url={branding?.iconUrl ?? null}
+            busy={busy}
+            onUpload={upload}
+            onReset={reset}
+            preview={iconPreview}
+          />
+        </>
+      )}
     </div>
   );
 }

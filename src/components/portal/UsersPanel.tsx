@@ -127,7 +127,10 @@ function SentDialog({ open, onOpenChange, to, what }: { open: boolean; onOpenCha
 
 export function UsersPanel({ version, bump, selfId }: { version: number; bump: () => void; selfId: string }) {
   const { data, loading } = useFetch<{ mailMode: "smtp" | "manual"; users: AdminUser[] }>("/api/admin/users", version);
-  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>("/api/admin/persons", version);
+  // v1.0.49 · дропдаун «Персона (судья)» фильтруется локально по isReferee:
+  // раньше фетчился общий список (стр. 1, 50 записей) — судьи «за алфавитом»
+  // были недостижимы для привязки аккаунта. Теперь — серверный фильтр корпуса.
+  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>("/api/admin/persons?officials=1", version);
   const { data: clubsData } = useFetch<{ clubs: AdminClub[] }>("/api/admin/clubs", version);
   const { data: leaguesData } = useFetch<{ leagues: AdminLeague[] }>("/api/admin/leagues", version);
   const [createOpen, setCreateOpen] = useState(false);

@@ -43,7 +43,6 @@ const fromLocalInput = (v: string) => new Date(`${v}:00+03:00`).toISOString();
  *  (раньше инспектор виднелся в списке, но API отвергал с 422). */
 const isOfficialCandidate = (p: AdminPerson) =>
   p.isReferee || p.roles.some((r) => REFEREE_CONFLICT_CODES.includes(r));
-
 interface OfficialRow { role: string; personId: string }
 
 interface MatchFormState {
@@ -77,7 +76,12 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
 
   const { data: teamsData } = useFetch<{ teams: AdminTeam[] }>(form ? "/api/admin/teams" : null);
   const { data: stadiumsData } = useFetch<{ stadiums: AdminStadium[] }>(form ? "/api/admin/stadiums" : null);
-  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>(form ? "/api/admin/persons" : null);
+  // v1.0.49 · КОРПУС НАЗНАЧЕНИЙ — с сервера, фильтром ?officials=1
+  // (судейский корпус + врач, без пагинации). Раньше фетчился общий
+  // список персон (первая страница из 50) и фильтровался на клиенте:
+  // при >50 персон судьи «за алфавитом» не попадали в дропдаун матча
+  // («выбрать можно только Алексееву»). Теперь пул приходит целиком.
+  const { data: personsData } = useFetch<{ persons: AdminPerson[] }>(form ? "/api/admin/persons?officials=1" : null);
 
   const leagues = overview?.leagues ?? [];
   const league = leagues.find((l) => l.id === (leagueId || leagues[0]?.id));
@@ -90,7 +94,10 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
   const matches = data?.matches ?? [];
   const teams = teamsData?.teams ?? [];
   const stadiums = stadiumsData?.stadiums ?? [];
+  // главный судья — только корпус (врача в «главные» не выбираем);
+  // строки бригады — весь пул (врач — полноправная роль бригады)
   const officialsPool = useMemo(() => (personsData?.persons ?? []).filter(isOfficialCandidate), [personsData]);
+  const brigadePool = useMemo(() => personsData?.persons ?? [], [personsData]);
 
   const allSelected = matches.length > 0 && matches.every((m) => selected.has(m.id));
 
@@ -395,7 +402,7 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
                       aria-label="Персона"
                     >
                       <option value="">— выбрать —</option>
-                      {officialsPool.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
+                      {brigadePool.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}
                     </select>
                     <button
                       type="button"

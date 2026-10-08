@@ -458,7 +458,7 @@ function AddPlayerDialog({ open, onClose, teamId, seasonId, seasonLabel, version
   const [np, setNp] = useState({ lastName: "", firstName: "", middleName: "", birthDate: "", position: "" });
   const [dupes, setDupes] = useState<{ id: string; name: string; birthDate: string | null }[] | null>(null);
 
-  const { data } = useFetch<{ persons: PersonLite[] }>(open && mode === "find" && q.trim().length >= 2 ? `/api/admin/persons?q=${encodeURIComponent(q.trim())}` : null, version);
+  const { data } = useFetch<{ persons: PersonLite[] }>(open && mode === "find" && q.trim().length >= 2 ? `/api/admin/persons?q=${encodeURIComponent(q.trim())}&pageSize=100` : null, version);
   const found = (data?.persons ?? []).slice(0, 12);
   const selected = found.find((p) => p.id === personId);
 

@@ -103,6 +103,10 @@ export const STATUS_LABELS: Record<string, string> = {
  *  Короткая серия (2–4 матча) — шум, а не сигнал для зрителя. */
 export const STREAK_MIN = 5;
 
+/** Порог серий «забивает/пропускает в каждом матче» (фидбек 2026-10-06):
+ *  только от 10 матчей подряд — ниже это норма, а не сигнал. */
+export const GOAL_STREAK_MIN = 10;
+
 /** Серии команд для сигналов ленты (код → читаемый текст) */
 export const STREAK_LABELS: Record<string, string> = {
   W: "побед",

@@ -21,7 +21,8 @@ import {
 import { KeyRound, Info, ShieldCheck, Smartphone, ArrowLeft, LifeBuoy } from "lucide-react";
 import { apiPost, useFetch } from "./hooks";
 import type { SessionUserDTO } from "./types";
-import { Logo, LogoGlyph } from "./Logo";
+import { LogoMark, BrandLogo } from "./Logo";
+import type { BrandingDTO } from "./types";
 
 const DEMO_ACCOUNTS = [
   { email: "admin@ff21.ru", password: "admin123", role: "Супер-администратор", desc: "Merge профилей, КДК, аудит, все права" },
@@ -32,10 +33,12 @@ const DEMO_ACCOUNTS = [
 ];
 
 interface Props {
+  /** v1.0.48: кастомный лого из «Сайт → Брендинг» (NULL — встроенный) */
+  branding?: BrandingDTO | null;
   onLoggedIn: (u: SessionUserDTO) => void;
 }
 
-export default function AdminLogin({ onLoggedIn }: Props) {
+export default function AdminLogin({ branding, onLoggedIn }: Props) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -101,7 +104,7 @@ export default function AdminLogin({ onLoggedIn }: Props) {
       <div className="theme-dark flex min-h-screen items-center justify-center bg-s0 p-4 text-ink">
         <div className="w-full max-w-md overflow-hidden rounded-2xl border border-sline bg-s1">
           <div className="stadium-glow flex items-center gap-2.5 px-5 py-4">
-            <LogoGlyph size={36} />
+            <LogoMark size={36} />
             <div>
               <p className="text-sm font-bold text-ink">Подтверждение входа</p>
               <p className="text-xs text-ink3">Двухфакторная защита аккаунта</p>
@@ -177,8 +180,14 @@ export default function AdminLogin({ onLoggedIn }: Props) {
     <div className="theme-dark flex min-h-screen items-center justify-center bg-s0 p-4 text-ink">
       <div className="grid w-full max-w-3xl gap-4 lg:grid-cols-2">
         <div className="overflow-hidden rounded-2xl border border-sline bg-s1">
-          <div className="stadium-glow flex items-center gap-2.5 px-5 py-4">
-            <Logo glyph={36} wordmarkClassName="text-lg" subtitle="вход для сотрудников ФФЧ" subtitleClassName="mt-0.5" />
+          <div className="stadium-glow flex items-center gap-4 px-5 py-4">
+            {/* v1.0.48: кастомный лого из админки либо встроенная
+                вертикаль «scores / b[поле]x» (v1.0.47, пути) */}
+            <BrandLogo branding={branding} height={58} variant="dark" />
+            <div className="min-w-0">
+              <p className="text-sm font-bold text-ink">Вход для сотрудников</p>
+              <p className="text-xs text-ink3">ФФЧ · scoresbox.ru</p>
+            </div>
           </div>
           <form onSubmit={login} className="space-y-4 p-5">
             <div className="space-y-1.5">

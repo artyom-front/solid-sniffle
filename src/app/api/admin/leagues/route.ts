@@ -20,6 +20,12 @@ export function leaguePayload(body: Record<string, unknown>) {
     if (!Number.isInteger(n) || n < min || n > max) throw new HttpError(422, `Число должно быть от ${min} до ${max}`);
     return n;
   };
+  // v1.0.49 (аудит Task 56): битая дата трансферного окна — честная 422
+  // (образец — banners: NaN проверялся, здесь — нет)
+  const transferWindowEnd = body.transferWindowEnd ? new Date(String(body.transferWindowEnd)) : null;
+  if (transferWindowEnd && Number.isNaN(transferWindowEnd.getTime())) {
+    throw new HttpError(422, "Некорректная дата закрытия трансферного окна");
+  }
   return {
     name,
     shortName: body.shortName ? String(body.shortName).trim() : null,
@@ -30,7 +36,7 @@ export function leaguePayload(body: Record<string, unknown>) {
     yellowCardBanMatches: int(body.yellowCardBanMatches, 1, 1, 10),
     redCardBanMatches: int(body.redCardBanMatches, 1, 0, 10),
     walkoverScore: int(body.walkoverScore, 3, 1, 9),
-    transferWindowEnd: body.transferWindowEnd ? new Date(String(body.transferWindowEnd)) : null,
+    transferWindowEnd,
   };
 }
 

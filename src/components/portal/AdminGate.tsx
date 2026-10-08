@@ -14,12 +14,20 @@ import { Suspense, useCallback, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Toaster } from "sonner";
 import { useSession } from "./router";
-import type { SessionUserDTO } from "./types";
+import { useFetch } from "./hooks";
+import type { BrandingDTO, SessionUserDTO } from "./types";
 import AdminLogin from "./AdminLogin";
 import AdminShell from "./AdminShell";
 import { SetPasswordCard } from "./SetPasswordCard";
 
 const STAFF_ROLES = ["SUPER_ADMIN", "LEAGUE_ADMIN", "CLUB_ADMIN", "REFEREE"];
+
+/** Публичная конфигурация (демо-входы + брендинг) — та же форма,
+ *  что отдаёт /api/public/site-config */
+interface SiteConfigDTO {
+  demoAccounts: boolean;
+  branding: BrandingDTO;
+}
 
 function AdminGate() {
   const router = useRouter();
@@ -27,6 +35,11 @@ function AdminGate() {
   const { user, loaded, setUser } = useSession<SessionUserDTO>();
   const [version, setVersion] = useState(0);
   const bump = useCallback(() => setVersion((v) => v + 1), []);
+  // v1.0.48: брендинг (кастомные лого из «Сайт → Брендинг») — одна
+  // загрузка на весь /admin, пробрасывается вниз. version = bump — смена
+  // лого в панели обновляет сайдбар/вход сразу (сайт — через ISR/revalidate)
+  const { data: siteConfig } = useFetch<SiteConfigDTO>("/api/public/site-config", version);
+  const branding = siteConfig?.branding ?? null;
 
   if (!loaded) {
     return (
@@ -42,11 +55,11 @@ function AdminGate() {
   // Одноразовая ссылка установки пароля — приоритетнее входа
   const pwset = searchParams.get("pwset");
   if (pwset) {
-    return <SetPasswordCard token={pwset} onDone={(u) => setUser(u)} />;
+    return <SetPasswordCard token={pwset} branding={branding} onDone={(u) => setUser(u)} />;
   }
 
   if (!user || !STAFF_ROLES.includes(user.role)) {
-    return <AdminLogin onLoggedIn={(u) => setUser(u)} />;
+    return <AdminLogin branding={branding} onLoggedIn={(u) => setUser(u)} />;
   }
 
   // v1.0.34: ПОЛНАЯ позиция из URL передаётся в AdminShell одним объектом
@@ -68,6 +81,7 @@ function AdminGate() {
       version={version}
       bump={bump}
       onReload={bump}
+      branding={branding}
       focusMatchId={searchParams.get("match")}
       urlPosition={urlPosition}
       onMatchHandled={() => {

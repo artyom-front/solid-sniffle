@@ -13,6 +13,7 @@ import { db } from "@/lib/db";
 import { requireRole, HttpError, type SessionUser } from "@/lib/auth";
 import { errorResponse } from "@/lib/http";
 import { audit } from "@/lib/engine/lifecycle";
+import { caseVariants } from "@/lib/text";
 
 /** Поиск кандидатов на слияние (для превью): персоны или команды */
 export async function GET(req: Request) {
@@ -20,10 +21,19 @@ export async function GET(req: Request) {
     await requireRole("SUPER_ADMIN");
     const { searchParams } = new URL(req.url);
     const type = searchParams.get("type") ?? "person";
-    const q = searchParams.get("q")?.trim().toLowerCase() ?? "";
 
     if (type === "team") {
+      // v1.0.49 · поиск на сервере: раньше take 500 + JS-фильтр — команды
+      // «за пределами пятисотки» не находились. Регистронезависимо —
+      // по вариантам (грабля locale-C, см. lib/text.ts).
+      const teamVariants = caseVariants(searchParams.get("q")?.trim() ?? "");
       const teams = await db.team.findMany({
+        where: teamVariants.length
+          ? { OR: teamVariants.flatMap((v) => [
+              { name: { contains: v, mode: "insensitive" as const } },
+              { club: { name: { contains: v, mode: "insensitive" as const } } },
+            ]) }
+          : {},
         include: {
           club: { select: { name: true } },
           _count: { select: { homeMatches: true, awayMatches: true, registrations: true, events: true } },
@@ -31,9 +41,8 @@ export async function GET(req: Request) {
         take: 500,
         orderBy: { name: "asc" },
       });
-      const filtered = q ? teams.filter((t) => t.name.toLowerCase().includes(q)) : teams;
       return Response.json({
-        teams: filtered.map((t) => ({
+        teams: teams.map((t) => ({
           id: t.id,
           name: t.name,
           clubName: t.club?.name ?? null,
@@ -46,7 +55,19 @@ export async function GET(req: Request) {
       });
     }
 
+    // v1.0.49 · поиск на сервере (по вариантам регистра — грабля locale-C):
+    // раньше take 500 + JS-фильтр — при росте базы дубли «за пределами
+    // пятисотки» переставали находиться, а merge — ровно тот инструмент,
+    // которым владелец чистит разрешённые дубли (Task 56).
+    const personVariants = caseVariants(searchParams.get("q")?.trim() ?? "");
     const persons = await db.person.findMany({
+      where: personVariants.length
+        ? { OR: personVariants.flatMap((v) => [
+            { lastName: { contains: v, mode: "insensitive" as const } },
+            { firstName: { contains: v, mode: "insensitive" as const } },
+            { middleName: { contains: v, mode: "insensitive" as const } },
+          ]) }
+        : {},
       include: {
         registrations: { include: { team: true } },
         events: { select: { id: true } },
@@ -54,14 +75,11 @@ export async function GET(req: Request) {
         refereedMatches: { select: { id: true } },
       },
       take: 500,
+      orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
     });
 
-    const filtered = q
-      ? persons.filter((p) => `${p.lastName} ${p.firstName} ${p.middleName ?? ""}`.toLowerCase().includes(q))
-      : persons;
-
     return Response.json({
-      persons: filtered.map((p) => ({
+      persons: persons.map((p) => ({
         id: p.id,
         name: `${p.lastName} ${p.firstName} ${p.middleName ?? ""}`.trim(),
         position: p.position,

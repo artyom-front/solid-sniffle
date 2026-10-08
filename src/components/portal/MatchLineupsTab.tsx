@@ -261,13 +261,14 @@ export default function MatchLineupsTab({ m }: { m: LineupsMatch }) {
 }
 
 /** Ячейка игрока зеркальной таблицы / мобильной строки:
- *  имя в ОДНУ строку (truncate), значки событий прижаты к центру
- *  (у хозяев — после имени, у гостей — до имени), замены: ушедший
- *  приглушён, вышедший выделен (futbol24 is-dimmed / is-on-pitch).
- *  stackMarks (мобильный режим <768px, директива 2026-10-02: «лучше
- *  уменьшить/перенести значки, чем резать имя»): имя занимает всю
- *  первую строку, значки событий переносятся на ВТОРУЮ строку
- *  вправо — имя видно целиком, строка не разваливается. */
+ *  имя в ОДНУ строку (truncate). Значки событий — ВПЛОТНУЮ к имени
+ *  (фидбек 2026-10-06: события должны быть РЯДОМ с футболистом, а не
+ *  «посередине таблицы»): у хозяев — сразу после имени, у гостей —
+ *  непосредственно перед ним. Замены: ушедший приглушён, вышедший
+ *  выделен (futbol24 is-dimmed / is-on-pitch). stackMarks (мобильный
+ *  <768px, директива 2026-10-02: «лучше уменьшить/перенести значки,
+ *  чем резать имя»): имя занимает всю первую строку, значки событий
+ *  переносятся на ВТОРУЮ строку вправо. */
 function PlayerCell({
   l,
   m,
@@ -303,17 +304,16 @@ function PlayerCell({
       data-lineup-player
       onClick={() => navigate(`/player/${l.person.id}`)}
     >
-      {side === "right" && marksNode}
-      {/* строка имени: [имя (truncate) + бейдж «К»] — при stackMarks
-          занимает первую строку целиком, значки уходят на вторую.
-          Зеркало futbol24: имя хозяев прижато ВЛЕВО (растягивается),
-          имя гостей — ВПРАВО (justify-end) */}
+      {/* строка имени: [имя (truncate) + бейдж «К» + значки] — у хозяев
+          прижаты ВЛЕВО и идут ПОДРЯД (имя не растягивается — значки
+          glued к нему); у гостей — зеркально ВПРАВО. При stackMarks
+          имя занимает первую строку целиком, значки — на второй. */}
       <span className={cn("flex min-w-0 flex-1 items-center gap-1.5", side === "right" && "justify-end", stackMarks && "basis-full")}>
+        {side === "right" && !stackMarks && marksNode}
         <span
           data-lineup-name
           className={cn(
             "min-w-0 truncate text-[12px] min-[480px]:text-[13px]",
-            side === "left" && "flex-1",
             st === "out" ? "text-ink3" : st === "in" ? "font-semibold text-ink" : "text-ink2"
           )}
         >
@@ -324,8 +324,9 @@ function PlayerCell({
             К
           </span>
         )}
+        {side === "left" && !stackMarks && marksNode}
       </span>
-      {side === "left" && marksNode}
+      {stackMarks && marksNode}
     </button>
   );
 }
