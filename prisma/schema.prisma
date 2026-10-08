@@ -481,8 +481,11 @@ model BrandSetting {
   /// Логотип для СВЕТЛОГО фона: сайдбар панели управления.
   /// NULL → на светлом фоне показывается logoDarkUrl
   logoLightUrl String?
-  /// Иконка браузера (favicon, apple-touch). NULL — встроенный знак-поле
+  /// Иконка браузера (favicon, apple-touch). NULL — встроенная SB-монограмма (v1.0.53)
   iconUrl      String?
+  /// Картинка для поисковиков/соцсетей og:image (рекомендация 1200×630).
+  /// NULL — встроенная карточка public/brand/og-default.png
+  ogImageUrl   String?
   updatedAt    DateTime @updatedAt
 }
 

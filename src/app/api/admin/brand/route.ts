@@ -4,12 +4,16 @@
 //   POST  — multipart/form-data, поля-файлы (необязательные, но хоть одно):
 //             logoDark  — лого для тёмного фона (шапка/футер сайта, вход);
 //             logoLight — лого для светлого фона (панель управления);
-//             icon      — фавикон (иконка вкладки + apple-touch).
+//             icon      — фавикон (иконка вкладки + apple-touch);
+//             ogImage   — карточка для поисковиков/соцсетей og:image
+//                         (фото-пайплайн: 1200×630, БЕЗ нормализации,
+//                         PNG/JPG/WebP/AVIF до 8 МБ — v1.0.53).
 //           Файлы кладутся в Media КАК ЕСТЬ (без WebP-конвертации медиа-
 //           эндпоинта: Safari не читает WebP-фавиконы, SVG обязан
 //           остаться вектором), SVG — через sanitizeSvg. Каждая загрузка
 //           = НОВЫЙ Media id = НОВЫЙ URL → immutable-кэш не мешает;
-//   PATCH — JSON { logoDarkUrl: null, logoLightUrl: null, iconUrl: null } —
+//   PATCH — JSON { logoDarkUrl: null, logoLightUrl: null, iconUrl: null,
+//           ogImageUrl: null } —
 //           сброс выбранных полей к встроенным лого (строки запрещены:
 //           URL брендинга создаётся ТОЛЬКО загрузкой сюда, произвольные
 //           ссылки не принимаются — анти-XSS).
@@ -65,7 +69,7 @@ export async function POST(req: Request) {
     }
 
     if (Object.keys(updates).length === 0) {
-      throw new HttpError(422, "Не передан ни один файл (поля logoDark / logoLight / icon)");
+      throw new HttpError(422, "Не передан ни один файл (поля logoDark / logoLight / icon / ogImage)");
     }
 
     await db.brandSetting.upsert({
@@ -99,7 +103,7 @@ export async function PATCH(req: Request) {
       updates[key] = null;
     }
     if (Object.keys(updates).length === 0) {
-      throw new HttpError(422, "Нечего сбрасывать: передайте logoDarkUrl/logoLightUrl/iconUrl = null");
+      throw new HttpError(422, "Нечего сбрасывать: передайте logoDarkUrl/logoLightUrl/iconUrl/ogImageUrl = null");
     }
 
     await db.brandSetting.upsert({

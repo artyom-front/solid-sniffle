@@ -3,7 +3,8 @@
 // к БД на рендер, сколько бы компонентов ни спросили.
 //
 // ОТКАТ УСТОЙЧИВ: БД недоступна (сборка без базы, деградация) →
-// встроенные лого/фавикон v1.0.47 — сайт не теряет облик.
+// встроенные лого/фавикон v1.0.47 + og-карточка v1.0.53 — сайт не
+// теряет облик.
 
 import { cache } from "react";
 import { db } from "@/lib/db";
@@ -16,6 +17,7 @@ export async function readBranding(): Promise<BrandingDTO> {
     logoDarkUrl: row.logoDarkUrl,
     logoLightUrl: row.logoLightUrl,
     iconUrl: row.iconUrl,
+    ogImageUrl: row.ogImageUrl,
   };
 }
 

@@ -4,6 +4,35 @@
 // ============================================================
 
 export const SITE_URL = (process.env.SITE_URL || "http://localhost:3000").replace(/\/$/, "");
+
+// ============================================================
+// Сайт целиком (root layout, v1.0.53 · feedback53 №2 — SEO-картинки
+// для поисковиков из админки): Organization + WebSite в исходном HTML.
+// ============================================================
+
+/** Организация: Яндекс/Google показывают лого организации в выдаче
+ *  (лого в сниппете, панель знаний). logoUrl — АБСОЛЮТНЫЙ URL: кастомный
+ *  лого из Media (/api/media/<id>, брендинг админки) или встроенная
+ *  SB-монограмма — префикс SITE_URL добавляет вызывающий код. */
+export function organizationJsonLd(brand: { name: string; logoUrl: string }) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    name: brand.name,
+    url: SITE_URL,
+    logo: brand.logoUrl,
+  };
+}
+
+/** WebSite: базовая сущность сайта (имя + url). */
+export function webSiteJsonLd(name: string) {
+  return {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name,
+    url: SITE_URL,
+  };
+}
 /** Хлебные крошки schema.org */
 export function breadcrumbJsonLd(items: { name: string; url?: string }[]) {
   return {

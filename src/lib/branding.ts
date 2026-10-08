@@ -7,6 +7,9 @@
 // ПОЛИТИКА ФАЙЛОВ БРЕНДИНГА:
 //   • логотипы — PNG/JPG/WebP/AVIF/SVG до 2 МБ;
 //   • фавикон — то же + ICO (image/x-icon) до 1 МБ;
+//   • og:image (v1.0.53) — ФОТО-пайплайн: PNG/JPG/WebP/AVIF до 8 МБ,
+//     БЕЗ квадратной нормализации (1200×630 — не квадрат) и без
+//     конвертаций (фото-лимиты, файл хранится как есть);
 //   • файлы хранятся КАК ЕСТЬ (без конвертации в WebP как в
 //     /api/admin/media): фавикон WebP не читает Safari, а лого
 //     в SVG обязан остаться вектором. Каждый аплоад = НОВЫЙ Media
@@ -20,19 +23,23 @@ import type { BrandingDTO } from "@/components/portal/types";
 export type { BrandingDTO };
 
 /** Виды загружаемых ассетов брендинга (поля POST /api/admin/brand) */
-export const BRAND_KINDS = ["logoDark", "logoLight", "icon"] as const;
+export const BRAND_KINDS = ["logoDark", "logoLight", "icon", "ogImage"] as const;
 export type BrandKind = (typeof BRAND_KINDS)[number];
 
 const MB = 1024 * 1024;
 
 const LOGO_MIMES = ["image/png", "image/jpeg", "image/webp", "image/avif", "image/svg+xml"];
 const ICON_MIMES = [...LOGO_MIMES, "image/x-icon", "image/vnd.microsoft.icon"];
+/** og:image — фото-набор (SVG/ICO ЗАПРЕЩЕНЫ: скрейперы соцсетей и
+ *  поисковиков SVG не читают, ICO — не фото) */
+const OG_MIMES = ["image/png", "image/jpeg", "image/webp", "image/avif"];
 
 /** Лимиты на файл по виду ассета */
 export const BRAND_LIMITS: Record<BrandKind, { mimes: string[]; maxBytes: number }> = {
   logoDark: { mimes: LOGO_MIMES, maxBytes: 2 * MB },
   logoLight: { mimes: LOGO_MIMES, maxBytes: 2 * MB },
   icon: { mimes: ICON_MIMES, maxBytes: 1 * MB },
+  ogImage: { mimes: OG_MIMES, maxBytes: 8 * MB },
 };
 
 /** Человекочитаемые названия для ошибок/UI */
@@ -40,6 +47,7 @@ export const BRAND_KIND_LABELS: Record<BrandKind, string> = {
   logoDark: "Логотип (тёмный фон)",
   logoLight: "Логотип (светлый фон)",
   icon: "Иконка браузера",
+  ogImage: "Карточка для соцсетей (og:image)",
 };
 
 /** Валидация файла брендинга: null = всё хорошо, строка = текст ошибки. */
@@ -102,11 +110,12 @@ export function sanitizeSvg(text: string): { ok: boolean; error?: string } {
   return { ok: true };
 }
 
-/** Дефолтные значения брендинга = встроенные лого v1.0.47 */
+/** Дефолтные значения брендинга = встроенные лого v1.0.47 + og v1.0.53 */
 export const DEFAULT_BRANDING: BrandingDTO = {
   logoDarkUrl: null,
   logoLightUrl: null,
   iconUrl: null,
+  ogImageUrl: null,
 };
 
 /** Дефолтные иконки браузера — SB-монограмма v1.0.53 (файлы из
@@ -119,3 +128,11 @@ export const DEFAULT_BRANDING: BrandingDTO = {
  *  → generateMetadata.icons). */
 export const DEFAULT_ICON_URL = "/brand/logo53/mark.svg";
 export const DEFAULT_APPLE_ICON_URL = "/brand/logo53/apple-icon.png";
+
+/** Дефолтная og-карточка 1200×630 (v1.0.53, feedback53 №2):
+ *  SB-монограмма + SCORESBOX на фирменном фоне — генерация
+ *  scripts/make-sb-mark.py + scripts/make-sb-assets.mjs. PNG
+ *  обязателен: скрейперы соцсетей/поисковиков SVG не читают. На неё
+ *  откатывается openGraph.images, пока админ не загрузил свою
+ *  («Сайт → Брендинг» → «SEO и поисковые системы»). */
+export const DEFAULT_OG_IMAGE_URL = "/brand/og-default.png";

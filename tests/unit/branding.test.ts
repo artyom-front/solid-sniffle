@@ -3,7 +3,7 @@
 // открытие /api/media/<id> не должно исполнять скрипты в origin сайта).
 
 import { describe, expect, test } from "bun:test";
-import { validateBrandFile, sanitizeSvg, BRAND_LIMITS, DEFAULT_BRANDING, DEFAULT_ICON_URL, DEFAULT_APPLE_ICON_URL } from "@/lib/branding";
+import { validateBrandFile, sanitizeSvg, BRAND_LIMITS, DEFAULT_BRANDING, DEFAULT_ICON_URL, DEFAULT_APPLE_ICON_URL, DEFAULT_OG_IMAGE_URL } from "@/lib/branding";
 
 describe("validateBrandFile (мимы и размеры)", () => {
   test("принимает допустимые типы логотипов", () => {
@@ -11,6 +11,14 @@ describe("validateBrandFile (мимы и размеры)", () => {
       expect(validateBrandFile("logoDark", mime, 1000)).toBeNull();
       expect(validateBrandFile("logoLight", mime, 1000)).toBeNull();
     }
+  });
+
+  test("og:image — фото-пайплайн: PNG/JPG/WebP/AVIF, SVG и ICO запрещены", () => {
+    for (const mime of ["image/png", "image/jpeg", "image/webp", "image/avif"]) {
+      expect(validateBrandFile("ogImage", mime, 1000)).toBeNull();
+    }
+    expect(validateBrandFile("ogImage", "image/svg+xml", 100)).toContain("не поддерживается");
+    expect(validateBrandFile("ogImage", "image/x-icon", 100)).toContain("не поддерживается");
   });
 
   test("фавикон: дополнительно принимает ICO, лого — нет", () => {
@@ -25,13 +33,17 @@ describe("validateBrandFile (мимы и размеры)", () => {
     expect(validateBrandFile("icon", "", 100)).toContain("не поддерживается");
   });
 
-  test("лимиты размеров: лого 2 МБ, иконка 1 МБ, пустой файл", () => {
+  test("лимиты размеров: лого 2 МБ, иконка 1 МБ, og 8 МБ, пустой файл", () => {
     expect(validateBrandFile("logoDark", "image/png", 2 * 1024 * 1024)).toBeNull();
     expect(validateBrandFile("logoDark", "image/png", 2 * 1024 * 1024 + 1)).toContain("больше");
     expect(validateBrandFile("icon", "image/png", 1 * 1024 * 1024)).toBeNull();
     expect(validateBrandFile("icon", "image/png", 1 * 1024 * 1024 + 1)).toContain("больше");
     expect(validateBrandFile("icon", "image/png", 0)).toContain("пустой");
     expect(BRAND_LIMITS.icon.maxBytes).toBeLessThan(BRAND_LIMITS.logoDark.maxBytes);
+    // og:image — фото-лимит 8 МБ, БЕЗ квадратной нормализации (feedback53 №2)
+    expect(validateBrandFile("ogImage", "image/png", 8 * 1024 * 1024)).toBeNull();
+    expect(validateBrandFile("ogImage", "image/png", 8 * 1024 * 1024 + 1)).toContain("больше");
+    expect(BRAND_LIMITS.ogImage.maxBytes).toBeGreaterThan(BRAND_LIMITS.logoDark.maxBytes);
   });
 });
 
@@ -67,8 +79,12 @@ describe("sanitizeSvg (stored-XSS через брендовый SVG)", () => {
 });
 
 describe("дефолты брендинга", () => {
-  test("NULL во всех полях = встроенные лого v1.0.47", () => {
-    expect(DEFAULT_BRANDING).toEqual({ logoDarkUrl: null, logoLightUrl: null, iconUrl: null });
+  test("NULL во всех полях = встроенные лого v1.0.47 + og v1.0.53", () => {
+    expect(DEFAULT_BRANDING).toEqual({ logoDarkUrl: null, logoLightUrl: null, iconUrl: null, ogImageUrl: null });
+  });
+  test("дефолтная og-карточка — PNG (скрейперы соцсетей SVG не читают)", () => {
+    expect(DEFAULT_OG_IMAGE_URL).toBe("/brand/og-default.png");
+    expect(DEFAULT_OG_IMAGE_URL.endsWith(".png")).toBe(true);
   });
   test("дефолтные иконки — SB-монограмма logo53 (feedback53)", () => {
     expect(DEFAULT_ICON_URL).toBe("/brand/logo53/mark.svg");

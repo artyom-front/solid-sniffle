@@ -64,6 +64,8 @@ export interface BrandingDTO {
   logoDarkUrl: string | null;
   logoLightUrl: string | null;
   iconUrl: string | null;
+  /** og:image — SEO-карточка для поисковиков/соцсетей; null = встроенная */
+  ogImageUrl: string | null;
 }
 
 export interface OverviewDTO {

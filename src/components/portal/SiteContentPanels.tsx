@@ -7,9 +7,10 @@
 //   • FormatsPanel — виды футбола в меню сайта: добавить/убрать/
 //     переименовать/скрыть/сортировать (стандарт 11×11, футзал 5×5,
 //     ЛФЛ 8×8 и разновидности — по ситуации).
-//   • BrandingPanel (v1.0.48) — логотипы и иконка браузера: загрузка
-//     PNG/JPG/WebP/AVIF/SVG, сброс к встроенным. Применяется по всему
-//     сайту сразу (revalidatePath) — без редеплоя.
+//   • BrandingPanel (v1.0.48; v1.0.53 + og:image) — логотипы, иконка
+//     браузера и SEO-карточка для поисковиков/соцсетей: загрузка
+//     PNG/JPG/WebP/AVIF/SVG (og — фото-набор без SVG), сброс к
+//     встроенным. Применяется по всему сайту сразу (revalidatePath).
 
 import { useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -18,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { BarChart3, Pencil, Plus, Shapes, Eye, EyeOff, Palette, Moon, Sun, AppWindow, Loader2, RotateCcw, UploadCloud } from "lucide-react";
+import { BarChart3, Pencil, Plus, Shapes, Eye, EyeOff, Palette, Moon, Sun, AppWindow, Loader2, RotateCcw, UploadCloud, Search } from "lucide-react";
 import { apiPost, useFetch } from "./hooks";
 import { EmptyState, LoadingBlock } from "./ui-bits";
 import { Field, DeleteBtn } from "./CrudPanels";
@@ -369,7 +370,8 @@ export function FormatsPanel({ bump, onReload, version = 0 }: CrudProps) {
 }
 
 // ============================================================
-// Брендинг сайта (v1.0.48): логотипы + иконка браузера.
+// Брендинг сайта (v1.0.48; v1.0.53 + SEO-карточка): логотипы,
+// иконка браузера и og:image для поисковиков/соцсетей.
 // Каждая загрузка ПРИМЕНЯЕТСЯ СРАЗУ (POST /api/admin/brand →
 // revalidatePath) — отдельной кнопки «Сохранить» нет. Файл кладётся
 // в Media КАК ЕСТЬ (SVG не конвертируется, фавикон не WebP-ится),
@@ -377,12 +379,14 @@ export function FormatsPanel({ bump, onReload, version = 0 }: CrudProps) {
 // Сброс «к стандартному» — PATCH с null.
 // ============================================================
 
-type BrandKindClient = "logoDark" | "logoLight" | "icon";
+type BrandKindClient = "logoDark" | "logoLight" | "icon" | "ogImage";
 
 const BRAND_ACCEPTS: Record<BrandKindClient, string> = {
   logoDark: ".png,.jpg,.jpeg,.webp,.avif,.svg",
   logoLight: ".png,.jpg,.jpeg,.webp,.avif,.svg",
   icon: ".png,.svg,.ico,.jpg,.jpeg,.webp,.avif",
+  // og:image — фото-пайплайн: SVG скрейперы соцсетей не читают
+  ogImage: ".png,.jpg,.jpeg,.webp,.avif",
 };
 
 /** Один ассет брендинга: превью «где живёт» + загрузка/сброс */
@@ -553,6 +557,26 @@ export function BrandingPanel({ bump, onReload, version = 0 }: CrudProps) {
     </div>
   );
 
+  const ogPreview = (
+    <div className="max-w-sm">
+      {/* мокап карточки ссылки — как Яндекс/мессенджеры превьюируют сайт */}
+      <div className="overflow-hidden rounded-lg border border-zinc-200 bg-white">
+        <div className="aspect-[1200/630] w-full overflow-hidden bg-zinc-100">
+          <img
+            src={branding?.ogImageUrl ?? "/brand/og-default.png"}
+            alt="Карточка og:image"
+            className="h-full w-full object-cover"
+          />
+        </div>
+        <div className="border-t border-zinc-100 px-3 py-2">
+          <p className="truncate text-[11px] font-semibold text-zinc-700">SCORESBOX — футбол Чувашии онлайн</p>
+          <p className="text-[10px] text-zinc-400">scoresbox.ru</p>
+        </div>
+      </div>
+      <p className="mt-1.5 text-[10px] text-zinc-400">Так ссылку на сайт видят в мессенджерах и поиске</p>
+    </div>
+  );
+
   return (
     <div className="space-y-4">
       <div>
@@ -560,8 +584,8 @@ export function BrandingPanel({ bump, onReload, version = 0 }: CrudProps) {
         <p className="mt-1 text-xs leading-relaxed text-zinc-500">
           Логотип и иконка браузера применяются <b>по всему сайту сразу после загрузки</b> — страницы
           перегенерируются автоматически. Пока ничего не загружено, используется встроенный
-          двухъярусный логотип «scores / b[поле]x» (v1.0.47). Каждая замена = новая ссылка,
-          закэшированные картинки не мешают.
+          двухъярусный логотип «scores / b[поле]x» (v1.0.47), фавикон — SB-монограмма (v1.0.53).
+          Каждая замена = новая ссылка, закэшированные картинки не мешают.
         </p>
       </div>
       {data && (
@@ -598,6 +622,27 @@ export function BrandingPanel({ bump, onReload, version = 0 }: CrudProps) {
             onUpload={upload}
             onReset={reset}
             preview={iconPreview}
+          />
+
+          {/* ---- SEO и поисковые системы (v1.0.53, feedback53 №2) ---- */}
+          <div className="pt-2">
+            <h4 className="flex items-center gap-1.5 text-sm font-bold text-zinc-800">
+              <Search className="h-4 w-4 text-emerald-600" /> SEO и поисковые системы
+            </h4>
+            <p className="mt-1 text-xs leading-relaxed text-zinc-500">
+              Яндекс и соцсети покажут эту картинку рядом со ссылкой на сайт.
+            </p>
+          </div>
+          <BrandAssetBlock
+            kind="ogImage"
+            title="Карточка ссылки (og:image)"
+            where="Яндекс · Telegram · VK · Twitter/X"
+            hint="Рекомендация 1200×630 (1.91:1), PNG/JPG/WebP/AVIF до 8 МБ. К квадрату НЕ приводим и не конвертируем — загрузите как есть. SVG не подходит: поисковики и мессенджеры его не читают."
+            url={branding?.ogImageUrl ?? null}
+            busy={busy}
+            onUpload={upload}
+            onReset={reset}
+            preview={ogPreview}
           />
         </>
       )}
