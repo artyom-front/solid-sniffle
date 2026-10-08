@@ -18,8 +18,11 @@
 //   • LogoHorizontal — шапка: [знак-поле] + «scoresbox» ОДНОЙ
 //     строкой (Baloo 2 Bold): scores белый, box золотой ПЛОСКИЙ.
 //     height = сторона знака (32px в шапке 56px — бриф).
-//   • LogoMark — знак-поле отдельно (2FA, favicon). simple=true —
-//     упрощённая разметка ≤24px (штрафные убраны, штрих утолщён).
+//   • LogoMark — SB-МОНОГРАММА (v1.0.53, feedback53: «маленьких лого,
+//     фавиконы и прочие — упростить до SB»): заглавные S+B чистыми
+//     SVG-путями (sb-paths.ts, генерация scripts/make-sb-mark.py) на
+//     золотом скруглённом квадрате rx 17.5% (геометрия знака-поля);
+//     до v1.0.53 здесь был знак-поле — разметка не читалась в 16–24px.
 //   • Logo — лок-ап шапки: LogoHorizontal + слоган (≥1024px).
 //
 // Знак-поле: скруглённый квадрат (rx 17.5%), разметка ВЫРЕЗАМИ
@@ -34,12 +37,12 @@ import { cn } from "@/lib/utils";
 import type { BrandingDTO } from "./types";
 import {
   FIELD_FULL,
-  FIELD_SIMPLE,
   HORIZONTAL,
   LOGO47_COLORS,
   VERTICAL,
   type FieldGeom,
 } from "./logo-paths";
+import { SB_MARK } from "./sb-paths";
 
 const { gold, goldDeep, goldAccent, white, ink, goldOnLight } = LOGO47_COLORS;
 
@@ -108,11 +111,18 @@ function FieldBody({
   );
 }
 
-/** Знак-поле: отдельный квадрат (favicon-масштаб, 2FA-страница).
- *  size — px; simple — упрощённая разметка ≤24px; mono — currentColor. */
+/** SB-монограмма — МАЛЫЙ ЗНАК портала (v1.0.53, feedback53:
+ *  «Маленьких лого, фавиконы и прочие надо упростить до SB в нашем
+ *  стиле»). Заглавные S+B (Baloo 2 ExtraBold) — ЧИСТЫЕ SVG-ПУТИ из
+ *  sb-paths.ts (генерация scripts/make-sb-mark.py): <text> нет и
+ *  webfont не нужен, пара литер читается во вкладке 16px — знак-поле
+ *  с разметкой в этом размере не читался. Бейдж — золотой квадрат
+ *  rx 17.5% (геометрия знака-поля logo47), литеры — ink.
+ *  size — px; mono — литеры currentColor без бейджа; simple —
+ *  совместимость вызовов (игнорируется: детализации нет). */
 export function LogoMark({
   size = 32,
-  simple = false,
+  simple: _simple = false,
   mono = false,
   className,
 }: {
@@ -121,21 +131,29 @@ export function LogoMark({
   mono?: boolean;
   className?: string;
 }) {
-  const id = useIds();
+  const W = SB_MARK.vb[2];
+  const H = SB_MARK.vb[3];
   return (
     <svg
       width={size}
       height={size}
-      viewBox="0 0 64 64"
-      className={cn("shrink-0", className)}
+      viewBox={`0 0 ${W} ${H}`}
+      className={cn("shrink-0", mono && "text-current", className)}
       aria-hidden="true"
       focusable="false"
     >
-      <FieldBody
-        geom={simple ? FIELD_SIMPLE : FIELD_FULL}
-        id={id}
-        fill={mono ? "currentColor" : gold}
-      />
+      {mono ? (
+        <>
+          <path d={SB_MARK.s} fill="currentColor" />
+          <path d={SB_MARK.b} fill="currentColor" />
+        </>
+      ) : (
+        <>
+          <rect width={W} height={H} rx={SB_MARK.rx} fill={gold} />
+          <path d={SB_MARK.s} fill={ink} />
+          <path d={SB_MARK.b} fill={ink} />
+        </>
+      )}
     </svg>
   );
 }
@@ -320,6 +338,11 @@ export function BrandLogo({
           style={{ height }}
           className="w-auto max-w-[200px] object-contain sm:max-w-[260px]"
         />
+      ) : height <= 32 ? (
+        // МАЛЫЙ лок-ап ≤32px (feedback53): двухъярусная вертикаль
+        // «scores / b[поле]x» в этом размере не читается — малый знак
+        // портала SB-монограмма (тот же, что фавикон по умолчанию)
+        <LogoMark size={height} />
       ) : (
         <LogoVertical size={Math.round(height * VERTICAL_ASPECT)} variant={variant} />
       )}

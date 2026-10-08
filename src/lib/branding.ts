@@ -109,9 +109,13 @@ export const DEFAULT_BRANDING: BrandingDTO = {
   iconUrl: null,
 };
 
-/** Дефолтные иконки браузера (файлы из public/brand/logo47/):
- *  mark-simple — упрощённый знак ≤24px (без штрафных, штрих толще),
- *  apple-icon 240 — полная разметка. На них сайт откатывается, пока
- *  админ не загрузил свои (root layout → generateMetadata.icons). */
-export const DEFAULT_ICON_URL = "/brand/logo47/mark-simple.svg";
-export const DEFAULT_APPLE_ICON_URL = "/brand/logo47/apple-icon.png";
+/** Дефолтные иконки браузера — SB-монограмма v1.0.53 (файлы из
+ *  public/brand/logo53/, генерация scripts/make-sb-mark.py): mark.svg
+ *  — фавикон (сетка 64, чистые пути), apple-icon.png 180×180 —
+ *  apple-touch (растеризация scripts/make-sb-assets.mjs). Юзер-фидбек
+ *  2026-10-08 («маленьких лого, фавиконы и прочие надо упростить до
+ *  SB»): знак-поле logo47 в 16–24px не читался — пара литер читается.
+ *  На них сайт откатывается, пока админ не загрузил свои (root layout
+ *  → generateMetadata.icons). */
+export const DEFAULT_ICON_URL = "/brand/logo53/mark.svg";
+export const DEFAULT_APPLE_ICON_URL = "/brand/logo53/apple-icon.png";

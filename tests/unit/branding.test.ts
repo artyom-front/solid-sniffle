@@ -70,8 +70,8 @@ describe("дефолты брендинга", () => {
   test("NULL во всех полях = встроенные лого v1.0.47", () => {
     expect(DEFAULT_BRANDING).toEqual({ logoDarkUrl: null, logoLightUrl: null, iconUrl: null });
   });
-  test("дефолтные иконки — файлы витрины logo47", () => {
-    expect(DEFAULT_ICON_URL).toBe("/brand/logo47/mark-simple.svg");
-    expect(DEFAULT_APPLE_ICON_URL).toBe("/brand/logo47/apple-icon.png");
+  test("дефолтные иконки — SB-монограмма logo53 (feedback53)", () => {
+    expect(DEFAULT_ICON_URL).toBe("/brand/logo53/mark.svg");
+    expect(DEFAULT_APPLE_ICON_URL).toBe("/brand/logo53/apple-icon.png");
   });
 });

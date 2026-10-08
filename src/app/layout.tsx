@@ -24,8 +24,9 @@ const SITE_URL = process.env.SITE_URL || "http://localhost:3000";
 
 // v1.0.48: generateMetadata вместо статического export — ИКОНКИ ВКЛАДКИ
 // БРАУЗЕРА теперь управляются из админки («Сайт → Брендинг»): пока админ
-// не загрузил свой фавикон, <link rel=icon> указывает на встроенный
-// знак-поле; file-conventions app/icon.svg и app/apple-icon.png УДАЛЕНЫ
+// не загрузил свой фавикон, <link rel=icon> указывает на встроенную
+// SB-монограмму (v1.0.53, logo53 — знак-поле logo47 не читался ≤24px);
+// file-conventions app/icon.svg и app/apple-icon.png УДАЛЕНЫ
 // (иначе конкурировали бы с metadata.icons) — одна точка правды.
 // Кастомный фавикон = /api/media/<id>, смена применяется через
 // revalidatePath (вызывает /api/admin/brand) — ISR-страницы не ждём 60 с.
@@ -35,7 +36,7 @@ export async function generateMetadata(): Promise<Metadata> {
     ? { icon: [{ url: brand.iconUrl }], apple: [{ url: brand.iconUrl }] }
     : {
         icon: [{ url: DEFAULT_ICON_URL, type: "image/svg+xml" }],
-        apple: [{ url: DEFAULT_APPLE_ICON_URL, sizes: "240x240" }],
+        apple: [{ url: DEFAULT_APPLE_ICON_URL, sizes: "180x180" }],
       };
   return {
     metadataBase: new URL(SITE_URL),
