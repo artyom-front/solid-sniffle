@@ -2999,3 +2999,38 @@ Stage Summary:
   страница команды / шапка события — не начато. Желательно: при
   следующей поставке загрузка sync.git-bundle юзера в чат (верификация
   его main до моих правок).
+
+---
+
+## Task ID: 57a — merge53: консолидированный 3-way merge двух линий разработки
+
+Agent: subagent-merge
+Date: 2026-10-08
+Task: 3-way merge (BASE=dbfix45 ONEFILE-дерево, MINE=HEAD c133b48 v1.0.52, THEIRS=crud49 бандл юзера) в ветку merge53 с обеими наборами фич и полной валидацией. Бандлы: transfer/scoresbox-2026-10-06-{logo47,branding48}.git-bundle, transfer/scoresbox-2026-10-07-crud49.git-bundle (скачаны с cloud.mail.ru через zip-API в прошлой миссии).
+
+Work Log:
+- BASE: `git fetch public/download/scoresbox-2026-10-06-dbfix45.git-bundle main:refs/base/dbfix45` → ed6ac99, package.json 1.0.45 ✓.
+- Графт-коммиты (обе линии — сквоши без родителей): MINE=b2f6529 (`commit-tree HEAD^{tree} -p BASE`), THEIR=b558f32 (`commit-tree refs/bundles/crud49/main^{tree} -p BASE`). Дерево MINE байт-в-байт = HEAD ✓.
+- ГРАБЛЯ `git merge`: porcelain отказался («refusing to merge unrelated histories») несмотря на общий merge-base ed6ac99; с `--allow-unrelated-histories` слил с ПУСТОЙ базой (60 ложных add/add-конфликтов, в индексе нет stage-1). Откат; повтор через plumbing: `git merge-recursive <BASE> -- <MINE> <THEIR>` — честный 3-way, 9 реальных конфликтов.
+- РАЗРЕШЕНИЕ КОНФЛИКТОВ (9 файлов):
+  - package.json → OURS (правило (a): без bump версии; в merge53 версия остаётся 1.0.52).
+  - scripts/make-archives.sh → OURS (наш delivery-пайплайн v1.0.52; их сторона старше).
+  - worklog.md → OURS (правило (a)).
+  - src/app/api/admin/persons/route.ts → OURS: наш officials=1 (v1.0.46, ранний return с лёгким DTO) + all=1 + дубль-гейт v1.0.52 покрывают их crud49-фикс (те же судьи, но в их варианте фильтр вшит в пагинацию pageSize 500); их вариант ничего не добавляет к нашему.
+  - src/components/portal/hooks.ts (apiPost) → OURS: обе линии независимо сделали один и тот же фикс «тело 409 в data при !ok»; наш `(j ?? {})` чуть безопаснее их `j`.
+  - src/components/portal/UsersPanel.tsx → OURS: их `persons?officials=1` против нашего `persons?all=1` — один баг (первые 50 персон), наш вариант общий (персона юзера ≠ только судья), их — подмножество.
+  - src/components/portal/MatchesCrudPanel.tsx → OURS: обе линии эквивалентно починили пул бригады (наши refereePool/officialsPool + мобильная сетка; их brigadePool) — семантика та же.
+  - src/components/portal/AdminPanels.tsx (RegistrationsPanel) → OURS: наш all=1 (полный список) + поле «дата заявки» (v1.0.46) решают ту же задачу, что их дебаунс-поиск ?q с pageSize=200; их вариант НЕ портирован (наш API в all=1 игнорирует q — комбинация потребовала бы переделки API, выигрыша нет).
+  - src/components/portal/TeamDetailPanel.tsx → OURS + ПОРТ их однострочника: `&pageSize=100` в find-поиске персон (был дефолт 50).
+  - prisma/schema.prisma → ЮНИОН (авто-мердж): их BrandSetting (id/logoDarkUrl/logoLightUrl/iconUrl/updatedAt) + все наши 21 модели = 22. Список моделей идентичен их стороне.
+- АВТО-МЕРДЖ (их сторона, нашу после db45 не трогала) — их фичи вошли целиком: 14-маршрутный CRUD-аудит crud49 (schedule: атомарная $transaction deleteMany+N; stadiums: capacity-422; seasons/leagues: NaN/даты → 422; banners/statblocks/formats: DELETE строго SUPER_ADMIN, banners PATCH не затирает startsAt/endsAt; ratings: Number.isInteger; suspensions: personId-404; merge: серверный поиск caseVariants; import: скоуп), брендинг-цепочка branding48 (BrandSetting + миграция 00000000000006, /api/admin/brand, sanitizeSvg в lib/branding, CSP-sandbox на /api/media для SVG, site-config force-dynamic с branding, AdminGate→AdminShell branding-проп, BrandingPanel в SiteContentPanels «Сайт → Брендинг» SUPER_ADMIN, динамический favicon в app/layout generateMetadata, file-conventions icon.svg/apple-icon.png удалены), лого-система logo47 (logo-paths.ts, Logo.tsx v2, public/brand/logo47/*.svg+PNG, скрипты assets), UX их линии (MatchLineupsTab значки «прижаты к имени», MatchPage StatLine/серии, TeamPage, AdminLogin/SetPasswordCard/SiteShell LogoVertical, brand.ts токены, labels GOAL_STREAK_MIN, types BrandingDTO, profiles +10).
+- «СУДЬИ В СОБЫТИИ» (crud49): по факту это пул судейского корпуса в диалоге матча (главный судья = только корпус, бригада = весь пул с врачом) + серверный фильтр officials=1 + UsersPanel-персона — обе половины у нас УЖЕ были (feedback46; семантика бригады v1.0.34 сохранена в нашем MatchesCrudPanel), дублирования не потребовалось. ProtocolEventsTab/события матча их линия после db45 НЕ меняла — там наша v1.0.52 match-state-логика цела.
+- ИХ ТЕСТЫ: branding.test.ts и apipost-error-body.test.ts вошли как есть и прошли БЕЗ адаптации (147 = наши 131 + их 16).
+- ГРАБЛЯ ПЕСОЧНИЦЫ (новая): платформенный watchdog периодически (~15-20 с) выполняет `git switch main` в репо (пойман post-checkout-хуком, /tmp/git-checkout-spy.log; родитель — внешний /bin/bash, не мои сессии). Инциденты из-за него: (1) `git merge --abort` уводит HEAD на ORIG_HEAD=main, и один мой `git reset --hard` попал в main — main восстановлен немедленно (`branch -f main c133b48`, байт-идентично, объекты не менялись); (2) один `prisma generate` начался на main (клиент без BrandSetting) — перезапущен на merge53 с проверкой PRE/POST. ЗАЩИТА: каждый прогон обёрнут проверкой branch=merge53 до/после; весь контент закоммичен.
+- merge-коммит: первый (5d3103b) случайно ушёл в main с родителем c133b48 — пересоздан commit-tree с правильными родителями (d4257ee), main возвращён на c133b48.
+
+Stage Summary:
+- ВАЛИДАЦИЯ на merge53 (d4257ee): prisma generate OK (BrandSetting в клиенте); migrate deploy применил 00000000000006_branding (таблица BrandSetting в БД: id/logoDarkUrl/logoLightUrl/iconUrl/updatedAt); tsc --noEmit — 0 ошибок; eslint — 0; bun test tests/unit — 147 pass / 0 fail (15 файлов: наши 13 + их branding/apipost-error-body), 604 expect, 849 мс.
+- СИГНАТУРЫ обеих линий в дереве merge53: OURS — PersonFields.tsx, lib/engine/match-state.ts, tests/unit/match-state.test.ts; THEIRS — portal/logo-paths.ts, lib/branding.ts, миграция 00000000000006_branding, api/admin/brand/route.ts, lib/services/branding.ts, оба их теста, public/brand/logo47/*. ✓
+- merge53 = d4257ee, родители b2f6529 (наш графт) + b558f32 (их графт); main НЕ тронут (c133b48, как был); push не выполнялся; build/make-archives не запускались; transfer/ не тронут.
+- СЛЕДУЮЩИМ МИССИЯМ (SEO-картинки / lightbox / монограмма SB): BrandSetting уже в схеме и БД — фичи строятся на нём (logoDarkUrl/logoLightUrl/iconUrl, Media bytea). Помнить: (а) watchdog переключает на main — всегда проверять ветку и работать быстрыми single-call-коммитами; (б) export DATABASE_URL перед prisma/bun test; (в) версия в package.json сознательно 1.0.52 (bump — отдельным релизным коммитом); (г) их RegistrationsPanel-дебаунс не портирован (у нас all=1) — если юзер попросит «поиск по всей базе с подсказкой», добавить ?q-режим в persons API.
