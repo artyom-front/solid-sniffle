@@ -100,6 +100,8 @@ export interface MatchDTO {
   awayScore: number | null;
   note: string | null;
   isFriendly?: boolean;
+  /** «Важный матч» — ручная пометка администратора (v1.0.54) */
+  isImportant?: boolean;
   protocolUrl?: string | null;
   protocolFileName?: string | null;
   homeTeam: { id: string; name: string; clubName: string | null; city?: string | null; logoUrl?: string | null };

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Plus, Pencil, Trash2, ClipboardPen, CalendarPlus, Flag, X, CheckSquare, Square, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, Trash2, ClipboardPen, CalendarPlus, Flag, X, CheckSquare, Square, AlertTriangle, Trophy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { REFEREE_CONFLICT_CODES } from "@/lib/roles";
 import { apiPost, useFetch, fmtDate } from "./hooks";
@@ -59,6 +59,8 @@ interface MatchFormState {
   note: string;
   status: string;
   isFinished: boolean;
+  /** v1.0.54: «Важный матч» — ручная пометка администратора */
+  isImportant: boolean;
   officials: OfficialRow[];
 }
 
@@ -152,6 +154,7 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
       refereeId: form.refereeId || null,
       round: form.isFriendly ? null : form.round ? Number(form.round) : null,
       note: form.note || null,
+      isImportant: form.isImportant,
       status: form.isFinished ? undefined : form.status || undefined,
       officials: form.officials.filter((o) => o.personId && o.role),
     };
@@ -205,7 +208,7 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
             onClick={() => setForm({
               seasonId: leagueSeasonId, isFriendly: mode === "friendly", homeTeamId: "", awayTeamId: "",
               kickoff: toLocalInput(new Date().toISOString()), stadiumId: "", refereeId: "", round: "", note: "", status: "SCHEDULED",
-              isFinished: false, officials: [],
+              isFinished: false, isImportant: false, officials: [],
             })}
           >
             <Plus className="mr-1 h-4 w-4" /> Матч
@@ -270,6 +273,11 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
                 {m.awayTeam.name}
               </span>
               <StatusBadge status={m.status} />
+              {m.isImportant && (
+                <Badge variant="outline" className="border-amber-200 bg-amber-50 text-amber-600" title="Матч помечен как важный">
+                  <Trophy className="mr-1 h-3 w-3" />важный
+                </Badge>
+              )}
               {m.referee ? (
                 <Badge variant="outline" className="font-normal text-zinc-500"><Flag className="mr-1 h-3 w-3" />{m.referee.name}</Badge>
               ) : (
@@ -292,6 +300,7 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
                   round: m.round ? String(m.round) : "", note: m.note ?? "",
                   status: m.status === "POSTPONED" ? "POSTPONED" : "SCHEDULED",
                   isFinished: m.status === "COMPLETED" || m.status === "WALKOVER" || m.status === "LIVE",
+                  isImportant: !!m.isImportant,
                   officials: m.officials.filter((o) => o.role !== "REFEREE").map((o) => ({ role: o.role, personId: o.person.id })),
                 })} aria-label="Редактировать">
                   <Pencil className="h-3.5 w-3.5" />
@@ -330,6 +339,23 @@ export function MatchesCrudPanel({ bump, version, overview, onOpenProtocol }: { 
               </Field>
               <Field label="Дата и время (МСК)"><Input type="datetime-local" value={form.kickoff} onChange={(e) => setForm({ ...form, kickoff: e.target.value })} /></Field>
               <Field label="Тур" hint={form.isFriendly ? "У товарищеских нет тура" : undefined}><Input type="number" disabled={form.isFriendly} value={form.round} onChange={(e) => setForm({ ...form, round: e.target.value })} placeholder="4" /></Field>
+              {/* v1.0.54 (feedback54 №10): «Важный матч» — ручная пометка:
+                  в ленте — иконка кубка + золотая рамка, в шапке матча — бейдж.
+                  Авто-логика удалена — админ сам знает, какой матч топовый. */}
+              <div className="sm:col-span-2">
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-zinc-200 bg-zinc-50/60 px-3 py-2.5 transition-colors hover:border-emerald-300">
+                  <input
+                    type="checkbox"
+                    checked={form.isImportant}
+                    onChange={(e) => setForm({ ...form, isImportant: e.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 cursor-pointer accent-emerald-600"
+                  />
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold text-zinc-700">Важный матч</span>
+                    <span className="block text-xs leading-snug text-zinc-400">Выделит карточку в ленте (золотая рамка + кубок) и добавит бейдж на странице матча. Дерби, матч за 1-е место, плей-офф — решаете вы, а не алгоритм.</span>
+                  </span>
+                </label>
+              </div>
               <Field label="Стадион">
                 <select value={form.stadiumId} onChange={(e) => setForm({ ...form, stadiumId: e.target.value })} className="h-9 w-full rounded-md border border-zinc-200 bg-white px-3 text-sm">
                   <option value="">— не указан —</option>

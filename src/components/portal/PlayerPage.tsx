@@ -7,7 +7,7 @@
 // команды, где руководил; комбинированные персоны видят все свои роли.
 
 import { useState } from "react";
-import { Flag, Star, Shield, UserCog, Ban, ArrowRightLeft } from "lucide-react";
+import { Flag, Shield, UserCog, Ban, ArrowRightLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { useFetch, fmtDate, fmtShortDate } from "./hooks";
@@ -64,7 +64,7 @@ interface PlayerDetail {
         yellowCards: number; redCards: number; cleanSheets: number;
       };
     }[];
-    events: { id: string; type: string; minute: number; isAssist: boolean; match: { id: string; home: string; away: string; status: string; kickoff: string } }[];
+    events: { id: string; type: string; minute: number; stoppage?: number | null; isAssist: boolean; match: { id: string; home: string; away: string; status: string; kickoff: string } }[];
   };
 }
 
@@ -88,6 +88,13 @@ function matchesWord(n: number): string {
   if (m10 === 1 && m100 !== 11) return `${n} матч`;
   if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return `${n} матча`;
   return `${n} матчей`;
+}
+
+/** Минута события для «Участия в событиях» (v1.0.54, feedback54 №11):
+ *  правильный типографский штрих 24′ вместо утечки HTML-сущности &apos;
+ *  (шаблонная строка не декодирует сущности) + компенсированное время 45+3′ */
+function eventMinute(e: { minute: number; stoppage?: number | null }): string {
+  return e.stoppage ? `${e.minute}+${e.stoppage}′` : `${e.minute}′`;
 }
 
 type Tab = "career" | "stats" | "discipline";
@@ -242,10 +249,14 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
             <StatTile value={p.referee.matches} label="матчи" accent />
             <StatTile value={p.referee.yellowAvg} label="ЖК/матч" />
             <StatTile value={p.referee.redAvg} label="КК/матч" />
-            <StatTile value={p.referee.avgRating ?? "—"} label="рейтинг" accent />
+            <StatTile value={p.referee.penaltyAvg} label="Пен./матч" />
           </div>
         )}
       </div>
+
+      {/* v1.0.54 (feedback54 №4): «Рейтинг» судейства убран из профиля —
+          голосований и отметок судьи не будет. Только игровая статистика,
+          которую собираем из протоколов после каждого матча. */}
 
       {/* ---------- Вкладки (Р-07/Р-26): единый стиль — активный таб =
           жёлтый текст + линия 2px снизу, БЕЗ рамок-боксов; 13px/600,
@@ -281,18 +292,10 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
                     ["ЖК/матч", p.referee.yellowAvg],
                     ["КК/матч", p.referee.redAvg],
                     ["Пен./матч", p.referee.penaltyAvg],
-                    ["Рейтинг", p.referee.avgRating ?? "—"],
-                    ["Оценок", p.referee.ratingsCount],
                   ].map(([label, value]) => (
-                    <StatTile key={label as string} value={value as string} label={label as string} accent={label === "Рейтинг"} />
+                    <StatTile key={label as string} value={value as string} label={label as string} />
                   ))}
                 </div>
-                {p.referee.avgRating !== null && (
-                  <p className="mt-2 flex items-center gap-1.5 text-xs text-ink2">
-                    <Star className="h-3.5 w-3.5 fill-gold text-gold" />
-                    Средняя оценка капитанов: <b className="font-mono text-gold">{p.referee.avgRating}</b> из 5
-                  </p>
-                )}
 
                 {/* Разбивка по лигам (Р-06): без min-width и горизонтального
                     скролла — ячейки переносятся по словам */}
@@ -305,7 +308,6 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
                           <th className="px-2 py-2 text-center font-semibold">Матчи</th>
                           <th className="px-2 py-2 text-center font-semibold">ЖК/м</th>
                           <th className="px-2 py-2 text-center font-semibold">КК/м</th>
-                          <th className="px-2 py-2 text-center font-semibold">Рейтинг</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -315,7 +317,6 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
                             <td className="px-2 py-2 text-center tabular text-ink">{l.matches}</td>
                             <td className="px-2 py-2 text-center tabular text-amber-400">{l.yellowAvg}</td>
                             <td className="px-2 py-2 text-center tabular text-live">{l.redAvg}</td>
-                            <td className="px-2 py-2 text-center tabular font-bold text-gold">{l.avgRating ?? "—"}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -429,7 +430,7 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
                           <EventIcon type={e.type} />
                           <span className="min-w-0 flex-1 break-words text-xs text-ink2">{e.match.home} — {e.match.away}</span>
                           <span className="ml-auto shrink-0 font-mono text-xs text-ink3">
-                            {e.isAssist ? `ассист ${e.minute}&apos;` : e.type === "GOAL" || e.type === "PENALTY" ? `гол ${e.minute}&apos;` : `${EVENT_LABELS[e.type] ?? e.type} ${e.minute}&apos;`}
+                            {e.isAssist ? `ассист ${eventMinute(e)}` : e.type === "GOAL" || e.type === "PENALTY" ? `гол ${eventMinute(e)}` : `${EVENT_LABELS[e.type] ?? e.type} ${eventMinute(e)}`}
                           </span>
                         </button>
                       ))}

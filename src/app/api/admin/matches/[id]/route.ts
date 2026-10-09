@@ -428,6 +428,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       data.kickoff = d;
     }
     if (body.round !== undefined) data.round = body.round ? Number(body.round) : null;
+    // v1.0.54: «Важный матч» — пометка администратора (правится всегда,
+    // в т.ч. у завершённого: это презентационный флаг, не результат)
+    if (body.isImportant !== undefined) data.isImportant = !!body.isImportant;
     if (body.stadiumId !== undefined) {
       if (body.stadiumId) {
         const st = await db.stadium.findUnique({ where: { id: body.stadiumId } });

@@ -450,7 +450,7 @@ function SignalsLegend() {
   const items: { icon: React.ReactNode; text: string }[] = [
     { icon: <Flame className="h-3.5 w-3.5 streak-hot streak-hot-glow" />, text: "команда «на огне» — 5+ побед подряд" },
     { icon: <Snowflake className="h-3.5 w-3.5 streak-cold" />, text: "кризис — 5+ поражений подряд" },
-    { icon: <Trophy className="h-3.5 w-3.5 text-gold" />, text: "важный матч: борьба за 1-е место, призовые места или место в таблице" },
+    { icon: <Trophy className="h-3.5 w-3.5 text-gold" />, text: "важный матч — помечен администратором в карточке матча (дерби, борьба за 1-е место, плей-офф)" },
     { icon: <UserX className="h-3.5 w-3.5 text-live" />, text: "у команды не сыграет лучший бомбардир (дисквалификация)" },
     { icon: <UserCog className="h-3.5 w-3.5 text-amber-300" />, text: "у команды новый тренер (последние 30 дней)" },
     { icon: <span className="h-1.5 w-1.5 rounded-full bg-live" />, text: "LIVE — счёт обновляется автоматически; идущая минута — красным, слева от команд" },

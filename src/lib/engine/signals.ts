@@ -35,7 +35,10 @@ export interface MatchSignal {
 export interface MatchSignals {
   home: MatchSignal;
   away: MatchSignal;
-  /// матч «за призы»: топ-соединение или финиш турнира (≤3 туров) и близкие соперники
+  /// «Важный матч» (v1.0.54, feedback54 №10): пометка ставится ТОЛЬКО
+  /// администратором (Match.isImportant). Прежняя авто-логика
+  /// (топ-соединение / финиш турнира / призовая зона) удалена: число
+  /// кругов в лиге заранее неизвестно, «важность» знает организатор.
   important: { flag: boolean; reason: string };
   /// всего туров в стадии и сколько осталось после этого матча
   roundsLeft: number | null;
@@ -200,6 +203,8 @@ export function matchSignals(match: {
   awayTeamId: string;
   homeName?: string;
   awayName?: string;
+  /** админ-пометка «важный матч» (v1.0.54) — единый источник важности */
+  isImportant?: boolean;
 }, ctx: SignalsContext, standings: StandingRow[]): MatchSignals {
   const maxRound = ctx.matches.reduce((mx, m) => Math.max(mx, m.round ?? 0), 0);
   const roundsLeft = match.round ? Math.max(0, maxRound - match.round) : null;
@@ -224,42 +229,13 @@ export function matchSignals(match: {
   const home = side(match.homeTeamId);
   const away = side(match.awayTeamId);
 
-  // важность: 1-е против 2-го — матч за золотые медали;
-  // или до конца ≤3 туров и близкие соперники (разница мест ≤2, очков ≤4);
-  // или обе команды в призовой зоне (пары из топ-4).
-  // Защита от шума: команды должны сыграть достаточно матчей.
-  // Тексты — с названиями команд (не «№7 против №5») и покороче.
-  let important = { flag: false, reason: "" };
-  if (home.position && away.position) {
-    const homeName = match.homeName ?? "Хозяева";
-    const awayName = match.awayName ?? "Гости";
-    const minGames = Math.min(home.games ?? 0, away.games ?? 0);
-    const goldClash = (home.position === 1 && away.position === 2) || (home.position === 2 && away.position === 1);
-    const posSum = home.position + away.position;
-    const closeRace =
-      roundsLeft !== null &&
-      roundsLeft <= 3 &&
-      minGames >= 3 &&
-      Math.abs(home.position - away.position) <= 2 &&
-      Math.abs((home.points ?? 0) - (away.points ?? 0)) <= 4;
-    const prizeZone =
-      posSum <= 7 &&
-      minGames >= 4 &&
-      (home.points ?? 0) >= 5 &&
-      (away.points ?? 0) >= 5 &&
-      roundsLeft !== null &&
-      roundsLeft <= 5;
-    if (goldClash) {
-      important = { flag: true, reason: `Матч за 1-е место: ${homeName} — ${awayName}` };
-    } else if (closeRace) {
-      important = {
-        flag: true,
-        reason: `${homeName} и ${awayName} борются за место в таблице — до конца турнира ${roundsLeft === 1 ? "остался" : "осталось"} ${roundsLeft} ${plural(roundsLeft, "тур", "тура", "туров")}`,
-      };
-    } else if (prizeZone) {
-      important = { flag: true, reason: `${homeName} и ${awayName} борются за призовые места` };
-    }
-  }
+  // ВАЖНОСТЬ — только админ-пометка (v1.0.54). Авто-логика «за 1-е место /
+  // призовая зона / близкие соперники» удалена по фидбеку: она срабатывала
+  // уже на первом матче сезона (позиции при 0 игр — алфавит, а число
+  // кругов лиги на старте неизвестно). Бейдж и рамка карточки — по флагу.
+  const important = match.isImportant
+    ? { flag: true, reason: "Матч помечен администратором как важный" }
+    : { flag: false, reason: "" };
 
   return { home, away, important, roundsLeft };
 }

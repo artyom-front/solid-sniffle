@@ -54,6 +54,14 @@ export async function seasonPlayerStats(seasonId: string): Promise<PlayerStatRow
     return row;
   };
 
+  // v1.0.54 (feedback54 №3): assistPersonId живёт не только у голов —
+  // у SUBSTITUTION это УШЕДШИЙ игрок (схема: одна строка на замену).
+  // Ассист — ТОЛЬКО передача под гол: GOAL/PENALTY с assistPersonId.
+  // Иначе замена давала игроку фантомный «ассист» за выход/уход с поля.
+  const ASSIST_TYPES = new Set(["GOAL", "PENALTY"]);
+  const isAssistPass = (e: { type: string; assistPersonId: string | null }) =>
+    !!e.assistPersonId && ASSIST_TYPES.has(e.type);
+
   // участие (по заявкам на матчи и по событиям)
   const playedMatches = new Map<string, Set<string>>();
   for (const l of lineups) {
@@ -65,8 +73,10 @@ export async function seasonPlayerStats(seasonId: string): Promise<PlayerStatRow
     get(e.personId, e.teamId, `${e.person.lastName} ${e.person.firstName}`, displayTeamName(e.team.name), e.person.position, e.person.photoUrl);
     if (!playedMatches.has(e.personId)) playedMatches.set(e.personId, new Set());
     playedMatches.get(e.personId)!.add(e.matchId);
-    if (e.assistPersonId) {
-      get(e.assistPersonId, e.teamId, "", displayTeamName(e.team.name), null);
+    // в статы-карту ассистент попадает только если это настоящий ассист
+    // (гол с передачей) — замены туда больше не протекают
+    if (isAssistPass(e)) {
+      get(e.assistPersonId!, e.teamId, "", displayTeamName(e.team.name), null);
     }
   }
 
@@ -79,8 +89,8 @@ export async function seasonPlayerStats(seasonId: string): Promise<PlayerStatRow
       if (e.type === "YELLOW_CARD") row.yellowCards++;
       if (e.type === "RED_CARD") row.redCards++;
     }
-    if (e.assistPersonId) {
-      const a = map.get(e.assistPersonId);
+    if (isAssistPass(e)) {
+      const a = map.get(e.assistPersonId!);
       if (a) a.assists++;
     }
   }

@@ -43,6 +43,12 @@ const STAT_TABS = [
   { id: "rc", label: "КК" },
 ] as const;
 
+/** Карточка «Самый результативный» показывается только для ДЕЙСТВИТЕЛЬНО
+ *  результативных матчей (v1.0.54, feedback54 №2): 3+ голов. Единственный
+ *  гол сезона 0:1 «самым результативным» не становится — при старте
+ *  чемпионата карточка просто не показывается, пока не наиграется контент. */
+const BEST_MATCH_MIN_GOALS = 3;
+
 export default function RightRail({ overview, banners, statBlocks, version, layout = "rail" }: Props) {
   const { data: dayData } = useFetch<{ leagues: MatchDayDTO[] }>(overview ? "/api/public/matches/day?date=all" : null, version);
 
@@ -55,7 +61,7 @@ export default function RightRail({ overview, banners, statBlocks, version, layo
     const live = all.filter((m) => m.status === "LIVE");
     const hot = live[0] ?? upcoming[0] ?? null;
     const best = all
-      .filter((m) => m.status === "COMPLETED")
+      .filter((m) => m.status === "COMPLETED" && (m.homeScore ?? 0) + (m.awayScore ?? 0) >= BEST_MATCH_MIN_GOALS)
       .sort((a, b) => (b.homeScore ?? 0) + (b.awayScore ?? 0) - (a.homeScore ?? 0) - (a.awayScore ?? 0))[0] ?? null;
     return { hotMatch: hot, bestMatch: best };
   }, [dayData]);

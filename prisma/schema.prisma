@@ -236,6 +236,10 @@ model Match {
   /// Скан/файл бумажного протокола: /api/media/<id> (загружается в редакторе протокола)
   protocolUrl      String?
   protocolFileName String?
+  /// «Важный матч» (v1.0.54, feedback54 №10): пометка ставится ТОЛЬКО
+  /// администратором в карточке матча — авто-логика «топ-соединение /
+  /// финиш турнира» удалена (число кругов в лиге неизвестно до старта)
+  isImportant      Boolean @default(false)
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 

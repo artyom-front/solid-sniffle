@@ -40,6 +40,14 @@ function streakWord(n: number): string {
   return "матчей подряд";
 }
 
+/** «1 очко» / «2 очка» / «5 очков» — согласование с числом */
+function pointsWord(n: number): string {
+  const m10 = n % 10, m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "очко";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "очка";
+  return "очков";
+}
+
 interface EventRow {
   id: string;
   minute: number;
@@ -345,10 +353,10 @@ function MatchStatus({ m, kickoffTime }: { m: NonNullable<MatchDetail["match"]>;
     );
   }
   if (m.status === "POSTPONED") {
-    return <p className="text-xs font-semibold uppercase tracking-wide text-ink3">перенесён</p>;
+    return <p className="text-xs font-semibold uppercase tracking-wide text-ink2">перенесён</p>;
   }
   if (m.status === "COMPLETED") {
-    return <p className="text-xs text-ink3">Завершён</p>;
+    return <p className="text-xs font-semibold text-ink2">Завершён</p>;
   }
   if (m.status === "WALKOVER") {
     return (
@@ -482,12 +490,16 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
                 {row?.form && <FormBadges form={row.form.slice(-5)} size="sm" />}
               </button>
               {/* мета — 12px серым, значения чуть светлее (двухтон,
-                фидбек 2026-10-06); одна-две строки с переносом */}
+                фидбек 2026-10-06); v1.0.54 (feedback54 №5): без матчей —
+                «дебют сезона» (никаких «0 очков за 0 игр»); с матчами —
+                «N место · P очков за M матчей» — понятнее, чем «№2 в
+                таблице», и без сокращений. «В таблице» убрано — и так
+                ясно, что место — в таблице. */}
               <p className="px-3 pt-1 text-xs text-ink3">
-                {sig?.position != null ? (
+                {sig && (sig.games ?? 0) > 0 && sig.position != null ? (
                   <>
-                    №<span className="font-bold text-ink2">{sig.position}</span> в таблице ·{" "}
-                    <span className="font-bold text-ink2">{sig.points}</span> очк. за {sig.games} игр
+                    <span className="font-bold text-ink2">{sig.position} место</span> ·{" "}
+                    <span className="font-bold text-ink2">{sig.points}</span> {pointsWord(sig.points ?? 0)} {lastMatchesWord(sig.games ?? 0)}
                   </>
                 ) : (
                   "дебют сезона"

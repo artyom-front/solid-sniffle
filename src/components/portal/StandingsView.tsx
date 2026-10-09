@@ -49,7 +49,14 @@ export default function StandingsView({ seasonId, version }: { seasonId: string;
             (<480px): [# | команда | И | О], разница мячей и В-Н-П —
             второй строкой внутри ячейки команды; padding 8px 6px,
             шрифт 12px. БЕЗ горизонтального скролла и обрезаний. */}
-        <table className="w-full text-xs min-[480px]:text-[13px]">
+        {/* v1.0.54: предварительная таблица (0 матчей) — все заявленные
+          команды с нулями; если команд нет вовсе — понятная заглушка */}
+      {rows.length === 0 ? (
+        <div className="px-3 py-6 text-center text-[13px] text-ink3">
+          В сезоне пока нет команд с заявками — зарегистрируйте игроков или добавьте матчи
+        </div>
+      ) : (
+      <table className="w-full text-xs min-[480px]:text-[13px]">
           <thead className="hidden border-b border-sline/60 text-[11px] uppercase tracking-[0.6px] text-ink3 min-[480px]:table-header-group">
             <tr>
               <th className="w-6 px-1 py-2 text-center font-semibold">#</th>
@@ -119,6 +126,7 @@ export default function StandingsView({ seasonId, version }: { seasonId: string;
             ))}
           </tbody>
         </table>
+      )}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

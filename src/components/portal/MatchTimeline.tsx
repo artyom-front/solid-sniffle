@@ -205,7 +205,7 @@ export default function MatchTimeline({
     name: theme === "dark" ? "text-ink" : "text-zinc-800",
     assist: theme === "dark" ? "text-ink3" : "text-zinc-400",
     note: theme === "dark" ? "text-ink3" : "text-zinc-400",
-    markerLabel: theme === "dark" ? "text-ink3" : "text-zinc-500",
+    markerLabel: theme === "dark" ? "text-ink2" : "text-zinc-600",
     markerScore: theme === "dark" ? "text-gold" : "text-emerald-700",
     subIn: theme === "dark" ? "text-ok" : "text-emerald-600",
     subOut: theme === "dark" ? "text-live" : "text-red-500",
@@ -275,12 +275,15 @@ export default function MatchTimeline({
     <div className={className}>
       {rows.map((row, i) => {
         // ---------- Полоса периода: «1-й тайм» / «ПЕРЕРЫВ 0:0» /
-        // «2-й тайм» / «Завершён 0:0» — лейбл слева, счёт справа ----------
+        // «2-й тайм» / «Завершён 0:0» — по центру, светлым ----------
         if (row.kind === "marker") {
+          // v1.0.54 (feedback54 №8): полосы периодов «1-й тайм / Перерыв 0:0 /
+          // 2-й тайм / Завершён 0:0» — лейбл и счёт ЕДИНЫМ ЦЕНТРИРОВАННЫМ
+          // блоком (как бегущий счёт голов в центре протокола), текст светлый
           return (
-            <div key={`m${i}`} data-timeline-marker className={cn("flex min-h-6 items-center gap-2 border-t px-3 py-1", t.row, t.markerBg)}>
+            <div key={`m${i}`} data-timeline-marker className={cn("flex min-h-6 items-center justify-center gap-2 border-t px-3 py-1", t.row, t.markerBg)}>
               <span className={cn("text-[11px] font-bold uppercase tracking-[0.6px]", t.markerLabel)}>{row.label}</span>
-              {row.score && <span className={cn("ml-auto shrink-0 tabular text-xs font-bold", t.markerScore)}>{row.score}</span>}
+              {row.score && <span className={cn("shrink-0 tabular text-xs font-bold", t.markerScore)}>{row.score}</span>}
             </div>
           );
         }

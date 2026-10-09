@@ -213,7 +213,7 @@ export async function getMatchDetail(id: string) {
   const sigCtx = seasonId ? await buildSignalsContext(seasonId) : null;
   const signals = sigCtx
     ? matchSignals(
-        { id: match.id, round: match.round, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, homeName: displayTeamName(match.homeTeam.name), awayName: displayTeamName(match.awayTeam.name) },
+        { id: match.id, round: match.round, homeTeamId: match.homeTeamId, awayTeamId: match.awayTeamId, homeName: displayTeamName(match.homeTeam.name), awayName: displayTeamName(match.awayTeam.name), isImportant: match.isImportant },
         sigCtx,
         standings
       )
@@ -434,6 +434,8 @@ export async function getPlayerProfile(id: string) {
     });
   }
 
+  // v1.0.54 (feedback54 №3): у SUBSTITUTION assistPersonId — УШЕДШИЙ игрок,
+  // это НЕ ассист. «Ассист» в профиле — только передача под гол.
   const events = await db.matchEvent.findMany({
     where: { OR: [{ personId: id }, { assistPersonId: id }] },
     include: { match: { include: { homeTeam: true, awayTeam: true, stage: { include: { season: true } } } } },
@@ -587,7 +589,7 @@ export async function getPlayerProfile(id: string) {
         type: e.type,
         minute: e.minute,
         stoppage: e.stoppage,
-        isAssist: e.assistPersonId === id,
+        isAssist: e.assistPersonId === id && (e.type === "GOAL" || e.type === "PENALTY"),
         match: {
           id: e.match.id,
           home: displayTeamName(e.match.homeTeam.name),

@@ -94,16 +94,18 @@ function buildSide(m: LineupsMatch, team: TeamRef): SideData {
 }
 
 /** Секции одной стороны: «Состав · заявка» (легаси) или
- *  «Основной состав» → «Запасные» → «Штаб» */
+ *  «Основной состав» → «Запасные» → «Штаб».
+ *  v1.0.54 (feedback54 №9): счётчики количества (· 11, · 9, · 3) убраны —
+ *  глазу легче, цифры считаются в протоколе, а не в подписи секции. */
 function sideSections(s: SideData): { title: string; rows: LineupRow[] }[] {
   if (s.legacy) {
-    return [{ title: `Состав · заявка${s.rows.length ? ` · ${s.rows.length}` : ""}`, rows: s.rows }];
+    return [{ title: "Состав · заявка", rows: s.rows }];
   }
   const list: { title: string; rows: LineupRow[] }[] = [
-    { title: `Основной состав${s.starters.length ? ` · ${s.starters.length}` : ""}`, rows: s.starters },
+    { title: "Основной состав", rows: s.starters },
   ];
-  if (s.bench.length > 0) list.push({ title: `Запасные · ${s.bench.length}`, rows: s.bench });
-  if (s.staff.length > 0) list.push({ title: `Штаб · ${s.staff.length}`, rows: s.staff });
+  if (s.bench.length > 0) list.push({ title: "Запасные", rows: s.bench });
+  if (s.staff.length > 0) list.push({ title: "Штаб", rows: s.staff });
   return list;
 }
 
@@ -172,16 +174,18 @@ export default function MatchLineupsTab({ m }: { m: LineupsMatch }) {
 
         {merged.map((sec, si) => (
           <Fragment key={si}>
-            {/* полоса секции: подпись хозяев слева, гостей справа */}
-            <div className="flex min-h-7 items-center justify-between gap-3 border-t bg-s2/40 px-2 py-1" data-lineup-section>
+            {/* полоса секции (v1.0.54, feedback54 №7): БЕЗ разделительной
+                линии и подложки — просто подпись, составы не «разрезаются»;
+                подпись чуть светлее прежней (text-ink2 вместо ink3) */}
+            <div className="flex min-h-7 items-center justify-between gap-3 px-2 py-1.5" data-lineup-section>
               {sec.homeTitle === sec.awayTitle || !sec.awayTitle ? (
-                <span className="mx-auto text-[11px] font-bold uppercase tracking-[0.6px] text-ink3">{sec.homeTitle || sec.awayTitle}</span>
+                <span className="mx-auto text-[11px] font-bold uppercase tracking-[0.6px] text-ink2">{sec.homeTitle || sec.awayTitle}</span>
               ) : !sec.homeTitle ? (
-                <span className="ml-auto text-[11px] font-bold uppercase tracking-[0.6px] text-ink3">{sec.awayTitle}</span>
+                <span className="ml-auto text-[11px] font-bold uppercase tracking-[0.6px] text-ink2">{sec.awayTitle}</span>
               ) : (
                 <>
-                  <span className="text-[11px] font-bold uppercase tracking-[0.6px] text-ink3">{sec.homeTitle}</span>
-                  <span className="text-[11px] font-bold uppercase tracking-[0.6px] text-ink3">{sec.awayTitle}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.6px] text-ink2">{sec.homeTitle}</span>
+                  <span className="text-[11px] font-bold uppercase tracking-[0.6px] text-ink2">{sec.awayTitle}</span>
                 </>
               )}
             </div>
@@ -239,7 +243,7 @@ export default function MatchLineupsTab({ m }: { m: LineupsMatch }) {
           <div className="px-2 py-1">
             {sideSections(active.side).map((sec) => (
               <Fragment key={sec.title}>
-                <p className="flex min-h-7 items-center border-t border-sline/40 bg-s2/40 px-2 py-1 text-[11px] font-bold uppercase tracking-[0.6px] text-ink3" data-lineup-section>
+                <p className="flex min-h-7 items-center px-2 py-1.5 text-[11px] font-bold uppercase tracking-[0.6px] text-ink2" data-lineup-section>
                   {sec.title}
                 </p>
                 {sec.rows.length === 0 && sec.title.startsWith("Основной") && <p className="border-t border-sline/40 px-1 py-1.5 text-xs text-ink3">не отмечены</p>}
@@ -314,7 +318,10 @@ function PlayerCell({
           data-lineup-name
           className={cn(
             "min-w-0 truncate text-[12px] min-[480px]:text-[13px]",
-            st === "out" ? "text-ink3" : st === "in" ? "font-semibold text-ink" : "text-ink2"
+            // v1.0.54 (feedback54 №7): основной состав — СВЕТЛЫМ (text-ink),
+            // запасные — приглушённее (ink2) — иерархия читается без линий;
+            // замены: вышедший — ярче, ушедший — ещё тусклее
+            st === "out" ? "text-ink3" : st === "in" ? "font-semibold text-ink" : l.isStarter ? "text-ink" : "text-ink2"
           )}
         >
           {l.person.name}

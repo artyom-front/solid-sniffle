@@ -72,6 +72,7 @@ export async function GET(req: Request) {
         homeScore: m.homeScore,
         awayScore: m.awayScore,
         isFriendly: m.isFriendly,
+        isImportant: m.isImportant,
         homeTeam: { id: m.homeTeam.id, name: m.homeTeam.name },
         awayTeam: { id: m.awayTeam.id, name: m.awayTeam.name },
         referee: m.referee ? { id: m.referee.id, name: `${m.referee.lastName} ${m.referee.firstName}` } : null,
@@ -127,7 +128,7 @@ export async function POST(req: Request) {
       });
     }
 
-    const { seasonId, stageId, round, homeTeamId, awayTeamId, kickoff, stadiumId, refereeId, note, isFriendly, officials } = body;
+    const { seasonId, stageId, round, homeTeamId, awayTeamId, kickoff, stadiumId, refereeId, note, isFriendly, isImportant, officials } = body;
 
     if (!homeTeamId || !awayTeamId) throw new HttpError(422, "Укажите обе команды");
     if (homeTeamId === awayTeamId) throw new HttpError(422, "Команды должны различаться");
@@ -155,6 +156,7 @@ export async function POST(req: Request) {
         data: {
           stageId: null,
           isFriendly: true,
+          isImportant: !!isImportant,
           round: null,
           homeTeamId, awayTeamId,
           stadiumId: stadiumId || null,
@@ -205,6 +207,7 @@ export async function POST(req: Request) {
     const match = await db.match.create({
       data: {
         stageId: stage.id,
+        isImportant: !!isImportant,
         round: round ? Number(round) : null,
         homeTeamId, awayTeamId,
         stadiumId: stadiumId || null,

@@ -193,7 +193,7 @@ export async function getMatchesDay(date: string, format: string) {
       matches: matches.map((m) => ({
         ...toMatchDTO(m, league.walkoverScore),
         signals: matchSignals(
-          { id: m.id, round: m.round, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeName: m.homeTeam.name, awayName: m.awayTeam.name },
+          { id: m.id, round: m.round, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeName: m.homeTeam.name, awayName: m.awayTeam.name, isImportant: m.isImportant },
           ctx,
           standings
         ),
@@ -220,7 +220,7 @@ export async function getMatchesDay(date: string, format: string) {
         matches: friendlies.map((m) => ({
           ...toMatchDTO(m, 3),
           signals: matchSignals(
-            { id: m.id, round: m.round, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeName: m.homeTeam.name, awayName: m.awayTeam.name },
+            { id: m.id, round: m.round, homeTeamId: m.homeTeamId, awayTeamId: m.awayTeamId, homeName: m.homeTeam.name, awayName: m.awayTeam.name, isImportant: m.isImportant },
             emptySignalsContext,
             []
           ),

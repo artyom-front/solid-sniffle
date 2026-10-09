@@ -16,6 +16,8 @@ export interface MatchDTO {
   awayScore: number | null;
   note: string | null;
   isFriendly?: boolean;
+  /** «Важный матч» — помечает администратор (v1.0.54); бейдж в ленте и шапке матча */
+  isImportant?: boolean;
   protocolUrl?: string | null;
   protocolFileName?: string | null;
   homeTeam: { id: string; name: string; clubName: string | null; logoUrl: string | null };
@@ -53,6 +55,7 @@ export function toMatchDTO(m: Awaited<ReturnType<typeof loadSeasonData>>["matche
   id: string; round: number | null; kickoff: Date; status: string; walkoverType: string | null;
   homeScore: number | null; awayScore: number | null; note: string | null;
   isFriendly: boolean; protocolUrl: string | null; protocolFileName: string | null;
+  isImportant?: boolean;
   homeTeam: { id: string; name: string; club?: { name: string | null } | null; logoUrl?: string | null };
   awayTeam: { id: string; name: string; club?: { name: string | null } | null; logoUrl?: string | null };
   stadium: { id: string; name: string; city: string | null } | null;
@@ -68,6 +71,7 @@ export function toMatchDTO(m: Awaited<ReturnType<typeof loadSeasonData>>["matche
     awayScore: m.awayScore,
     note: m.note,
     isFriendly: m.isFriendly,
+    isImportant: (m as { isImportant?: boolean }).isImportant ?? false,
     protocolUrl: m.protocolUrl,
     protocolFileName: m.protocolFileName,
     // фидбек 2026-10-01: публичное имя команды — без суффикса «№N»
@@ -90,10 +94,23 @@ export function displayScore(m: MatchDTO): { home: number; away: number } | null
 
 export async function seasonStandings(seasonId: string): Promise<StandingRow[]> {
   const { season, stages, matches, cardEvents } = await loadSeasonData(seasonId);
+  // v1.0.54 (feedback54 №1): команды берутся из ЗАЯВОК сезона, а не только
+  // из матчей — предварительная таблица видна ДО первого сыгранного матча
+  // (все команды с 0 игр). Матчевые команды добавляются объединением —
+  // чтобы таблица не теряла команды, заявленные позже/без заявок.
+  // Семантика «активной заявки» — как в генераторе расписания.
   const teams = new Map<string, { id: string; name: string; clubName: string | null }>();
+  const regs = await db.registration.findMany({
+    where: { seasonId, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] },
+    include: { team: { include: { club: true } } },
+  });
+  for (const r of regs) {
+    if (teams.has(r.teamId)) continue;
+    teams.set(r.teamId, { id: r.team.id, name: displayTeamName(r.team.name), clubName: r.team.club?.name ?? null });
+  }
   for (const m of matches) {
-    teams.set(m.homeTeamId, { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), clubName: m.homeTeam.club?.name ?? null });
-    teams.set(m.awayTeamId, { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), clubName: m.awayTeam.club?.name ?? null });
+    if (!teams.has(m.homeTeamId)) teams.set(m.homeTeamId, { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), clubName: m.homeTeam.club?.name ?? null });
+    if (!teams.has(m.awayTeamId)) teams.set(m.awayTeamId, { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), clubName: m.awayTeam.club?.name ?? null });
   }
   const stage = stages[0];
   return computeStandings(

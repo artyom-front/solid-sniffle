@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { computeStreak, isHotStreak, isColdStreak, plural } from "@/lib/engine/signals";
+import { computeStreak, isHotStreak, isColdStreak, matchSignals, plural, type SignalsContext } from "@/lib/engine/signals";
 import { STREAK_MIN } from "@/lib/labels";
 
 /** Минимальный матч для computeStreak */
@@ -125,5 +125,45 @@ describe("Плюрализация (русская морфология)", () =>
     expect(plural(21, "тур", "тура", "туров")).toBe("тур");
     expect(plural(111, "гол", "гола", "голов")).toBe("голов");
     expect(plural(0, "матч", "матча", "матчей")).toBe("матчей");
+  });
+});
+
+describe("«Важный матч» — только админ-пометка (v1.0.54, feedback54 №10)", () => {
+  const emptyCtx: SignalsContext = {
+    standings: [],
+    matches: [],
+    topScorers: new Map(),
+    suspended: new Map(),
+    newCoaches: new Map(),
+  };
+  const standings = [
+    { position: 1, teamId: "A", teamName: "A", clubName: null, games: 1, wins: 1, draws: 0, losses: 0, goalsFor: 3, goalsAgainst: 0, goalDiff: 3, points: 3, techLosses: 0, techWins: 0, fairPlay: 0, yellowCards: 0, redCards: 0, form: ["W"] },
+    { position: 2, teamId: "B", teamName: "B", clubName: null, games: 1, wins: 0, draws: 0, losses: 1, goalsFor: 0, goalsAgainst: 3, goalDiff: -3, points: 0, techLosses: 0, techWins: 0, fairPlay: 0, yellowCards: 0, redCards: 0, form: ["L"] },
+  ];
+
+  test("топ-соединение 1-е против 2-го БЕЗ пометки — НЕ важный (авто-логика удалена)", () => {
+    const sigs = matchSignals(
+      { id: "m1", round: 2, homeTeamId: "A", awayTeamId: "B", homeName: "A", awayName: "B", isImportant: false },
+      emptyCtx,
+      standings
+    );
+    expect(sigs.important.flag).toBe(false);
+    expect(sigs.important.reason).toBe("");
+  });
+
+  test("первый матч сезона (0 игр у всех) — НЕ важный сам по себе", () => {
+    const sigs = matchSignals({ id: "m2", round: 1, homeTeamId: "A", awayTeamId: "B", isImportant: false }, emptyCtx, []);
+    expect(sigs.important.flag).toBe(false);
+  });
+
+  test("админ-пометка isImportant=true → важный (любой статус, любые соперники)", () => {
+    const sigs = matchSignals({ id: "m3", round: 1, homeTeamId: "A", awayTeamId: "B", isImportant: true }, emptyCtx, []);
+    expect(sigs.important.flag).toBe(true);
+    expect(sigs.important.reason).toContain("важный");
+  });
+
+  test("флаг не передан → не важный (обратная совместимость колбэков)", () => {
+    const sigs = matchSignals({ id: "m4", round: 1, homeTeamId: "A", awayTeamId: "B" }, emptyCtx, standings);
+    expect(sigs.important.flag).toBe(false);
   });
 });
