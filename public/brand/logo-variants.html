@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCORESBOX · система логотипа v1.0.47</title>
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="logo47/mark-simple.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --s0: #0a0d13; --s1: #141922; --s2: #1a1f2e; --sline: #2a3040;
+    --ink: #eeeeee; --ink2: #8899aa; --ink3: #5e6c7d;
+    --gold: #ffd700; --gold-deep: #f5c518; --gold-accent: #edbe00;
+    --paper: #f1ede8; /* презентационный фон исходника (бриф) */
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--s0); color: var(--ink);
+    font-family: "Onest", -apple-system, "SF Pro Text", "Segoe UI", Arial, sans-serif;
+    min-height: 100vh; padding: 40px 20px 80px;
+  }
+  .wrap { max-width: 900px; margin: 0 auto; }
+  h1 { font-weight: 500; font-size: 26px; letter-spacing: -0.01em; line-height: 1.15; }
+  h1 .sc { color: var(--ink); } h1 .bx { color: var(--gold); font-weight: 700; }
+  .sub { margin-top: 8px; color: var(--ink3); font-size: 14px; line-height: 1.55; max-width: 720px; }
+  .grid { margin-top: 28px; display: grid; gap: 12px; }
+  @media (min-width: 640px) { .grid { grid-template-columns: 1fr 1fr; } }
+  .card {
+    background: var(--s1); border: 1px solid var(--sline); border-radius: 8px;
+    padding: 24px 20px 18px; display: flex; flex-direction: column; gap: 18px;
+  }
+  .card.wide { grid-column: 1 / -1; }
+  .badge {
+    align-self: flex-start; font-size: 11px; font-weight: 700; letter-spacing: .06em;
+    text-transform: uppercase; color: var(--gold); background: rgba(255,215,0,.12);
+    border-radius: 6px; padding: 3px 9px;
+  }
+  .stage { display: flex; align-items: center; justify-content: center; min-height: 170px; border-radius: 8px; }
+  .stage.dark { background: var(--s0); }
+  .stage.panel { background: var(--s2); }
+  .stage.paper { background: var(--paper); }
+  .stage.white { background: #ffffff; }
+  .name { font-weight: 600; font-size: 15px; }
+  .why { color: var(--ink3); font-size: 13px; line-height: 1.55; margin-top: auto; }
+  .scale { display: flex; align-items: center; gap: 18px; flex-wrap: wrap; color: var(--ink3); font-size: 11px; }
+  .scale span { display: flex; align-items: center; gap: 6px; }
+  img { display: block; }
+
+  /* мокап шапки 56px: знак 32 + слоган */
+  .hdr { background: rgba(10,13,19,.96); border: 1px solid var(--sline); border-radius: 8px; }
+  .hdr .bar { display: flex; align-items: center; height: 56px; padding: 0 16px; gap: 12px; }
+  .hdr .tag { border-left: 1px solid var(--sline); padding-left: 12px; font-size: 12px; color: var(--ink3); }
+
+  /* охранное поле */
+  .clear { border: 1px dashed var(--ink3); border-radius: 4px; display: inline-flex; }
+  .clear .lbl { align-self: flex-start; margin-top: -18px; font-size: 10px; color: var(--ink3); letter-spacing: .04em; }
+
+  /* запреты */
+  .dont { position: relative; }
+  .dont::after {
+    content: "✕"; position: absolute; top: 6px; right: 10px; color: #ff5d5d;
+    font-size: 18px; font-weight: 700;
+  }
+  .stretched img { width: 190px; height: 26px; }
+  .recolor img { filter: hue-rotate(180deg); }
+
+  /* палитра */
+  .swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+  .sw { border-radius: 8px; border: 1px solid var(--sline); width: 118px; overflow: hidden; }
+  .sw i { display: block; height: 54px; }
+  .sw b { display: block; padding: 6px 8px 7px; font-size: 11px; font-weight: 600; background: var(--s2); color: var(--ink2); font-family: ui-monospace, Menlo, Consolas, monospace; }
+
+  .tab { display: inline-flex; align-items: center; gap: 8px; background: #2a2f3a; border-radius: 8px 8px 0 0; padding: 7px 12px; color: #cfd6e0; font-size: 12px; }
+  .tab .dot { width: 8px; height: 8px; border-radius: 50%; background: #4b5563; margin-right: 2px; }
+  code { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 12px; color: var(--ink2); }
+  ul.rules { color: var(--ink2); font-size: 13.5px; line-height: 1.7; padding-left: 18px; }
+  ul.rules b { color: var(--ink); font-weight: 600; }
+  ul.rules li::marker { color: var(--gold); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1><span class="sc">scores</span><span class="bx">box</span> · система логотипа v1.0.47</h1>
+  <p class="sub">
+    «Коробка, в которой собраны все счёты». В слове box буква «o» — пиктограмма футбольного
+    поля (вид сверху): футбол буквально внутри «коробки счёта». Все лого — чистые SVG-пути
+    (контуры Baloo&nbsp;2): текста нет, перенос на две строки невозможен, webfont не нужен.
+    Геометрия и ассеты генерируются <code>scripts/make-logo47.py</code> +
+    <code>make-brand-assets.mjs</code>; в React — <code>Logo.tsx</code>.
+  </p>
+
+  <div class="grid">
+    <!-- 1. ПАРАДНАЯ ВЕРТИКАЛЬНАЯ -->
+    <div class="card">
+      <span class="badge">Основная · вертикальная (тёмный фон)</span>
+      <div class="stage dark"><img src="logo47/vertical-dark.svg" width="230" alt="SCORESBOX вертикальный"></div>
+      <p class="why">
+        «scores» — Baloo&nbsp;2 Medium, белый, ~½ высоты box; «b[поле]x» — ExtraBold,
+        мягкий градиент <b>#FFD700→#F5C518</b>; поле — «o» чуть крупнее букв, самый
+        насыщенный акцент (#F5C518→#EDBE00). Выключка влево, ширины строк выровнены,
+        зазор минимальный. <b>Градиент — только в этой версии.</b>
+      </p>
+    </div>
+    <div class="card">
+      <span class="badge">Светлый фон (инверсия)</span>
+      <div class="stage paper"><img src="logo47/vertical-light.svg" width="230" alt="SCORESBOX вертикальный на светлом"></div>
+      <p class="why">
+        На светлом фоне белый «scores» исчезает (видно в исходнике) — инверсия:
+        «scores» → <b>#0A0D13</b>, золото остаётся. Презентационный фон исходника
+        — #F1EDE8. Минимальный размер: <b>≥ 40px по высоте</b>.
+      </p>
+    </div>
+
+    <!-- 2. МОНОХРОМ -->
+    <div class="card">
+      <span class="badge">Монохром · белый</span>
+      <div class="stage dark"><img src="logo47/vertical-mono-white.svg" width="150" alt="монохром белый"></div>
+      <p class="why">Печать на тёмном, сторис, водяные знаки. В коде — <code>currentColor</code>.</p>
+    </div>
+    <div class="card">
+      <span class="badge">Монохром · чёрный</span>
+      <div class="stage white"><img src="logo47/vertical-mono-black.svg" width="150" alt="монохром чёрный"></div>
+      <p class="why">Печать на светлом (документы, бланки, факс-версии протоколов).</p>
+    </div>
+
+    <!-- 3. ГОРИЗОНТАЛЬНАЯ: ШАПКА -->
+    <div class="card wide">
+      <span class="badge">Горизонтальная · шапка сайта (высота 56px, знак 32px)</span>
+      <div class="hdr">
+        <div class="bar">
+          <img src="logo47/horizontal-dark.svg" height="32" alt="SCORESBOX горизонтальный">
+          <span class="tag">Футбол Чувашии онлайн</span>
+          <span style="margin-left:auto;color:var(--ink3);font-size:13px">поиск…</span>
+        </div>
+      </div>
+      <div class="scale">
+        <span><img src="logo47/horizontal-dark.svg" height="48"> 48px</span>
+        <span><img src="logo47/horizontal-dark.svg" height="32"> 32px (шапка)</span>
+        <span><img src="logo47/horizontal-dark.svg" height="24"> 24px (мин.)</span>
+      </div>
+      <p class="why">
+        <b>[знак-поле 32px] + «scoresbox» одной строкой</b>: «scores» белый, «box» —
+        золото <b>плоским</b> цветом (градиент в интерфейсе запрещён). Перенос и разрыв
+        на две строки невозможны по построению — живого текста нет (дефект шапки
+        v1.0.46 закрыт). Слоган — 12px серым, только ≥1024px.
+      </p>
+      <div class="stage paper" style="min-height:90px">
+        <img src="logo47/horizontal-light.svg" height="28" alt="SCORESBOX горизонтальный светлый">
+      </div>
+      <p class="why">Светлая версия (админ-тема): «scores» #0A0D13, золото #b45309 (канон светлой темы).</p>
+    </div>
+
+    <!-- 4. ЗНАК-ПОЛЕ -->
+    <div class="card">
+      <span class="badge">Знак-поле · полная разметка</span>
+      <div class="stage panel">
+        <div class="scale" style="gap:22px">
+          <span><img src="logo47/mark-full.svg" width="96"> 96</span>
+          <span><img src="logo47/mark-full.svg" width="64"> 64</span>
+          <span><img src="logo47/mark-full.svg" width="32"> 32</span>
+        </div>
+      </div>
+      <p class="why">
+        Скруглённый квадрат (радиус углов 17.5%), разметка — вырезами (негативное
+        пространство, цвет фона): центральная линия, круг-кольцо (d 33%), штрафные
+        у кромок (16×33%), штрих 5.5% стороны. Отдельно живёт в 2FA-хедере.
+      </p>
+    </div>
+    <div class="card">
+      <span class="badge">Знак-поле · ≤24px (фавикон)</span>
+      <div class="stage panel">
+        <div class="scale" style="gap:22px">
+          <span><img src="logo47/mark-simple.svg" width="32"> 32</span>
+          <span><img src="logo47/mark-simple.svg" width="24"> 24</span>
+          <span><img src="logo47/mark-simple.svg" width="16"> 16</span>
+        </div>
+      </div>
+      <div class="stage dark" style="min-height:64px">
+        <span class="tab"><i class="dot"></i><img src="logo47/mark-simple.svg" width="16" style="margin:0 2px">scoresbox.ru</span>
+      </div>
+      <p class="why">
+        При ≤24px штрафные убраны — остаются центральная линия + круг, штрих утолщён
+        до 8.75% («штрихи упрощаются/утолщаются пропорционально»). Это
+        <code>src/app/icon.svg</code>; <code>apple-icon.png</code> 240 — полная разметка.
+      </p>
+    </div>
+
+    <!-- 5. OG-КАРТОЧКА -->
+    <div class="card wide">
+      <span class="badge">OG-карточка 1200×630</span>
+      <div class="stage dark" style="padding:12px">
+        <img src="/og-image.png" width="560" alt="OG-карточка SCORESBOX">
+      </div>
+      <p class="why">
+        Тёмный фон опак (#0A0D13) — соцсети композитят альфу на белый, вырезы показывают
+        фон и не «бледнеют» (грабля v1.0.46). Текст — путями (Onest), рендер не зависит
+        от шрифтов. Подключена в openGraph/twitter-метаданных.
+      </p>
+    </div>
+
+    <!-- 6. ОХРАННОЕ ПОЛЕ -->
+    <div class="card">
+      <span class="badge">Охранное поле ≥ высоты буквы «b»</span>
+      <div class="stage dark">
+        <div class="clear" style="padding:68px">
+          <span class="lbl">зазор = высота «b»</span>
+          <img src="logo47/vertical-dark.svg" width="160" alt="">
+        </div>
+      </div>
+      <p class="why">Со всех сторон — не меньше высоты буквы «b» (в вертикали ≈ 42% ширины блока). Слева — вертикальная версия, зазор показан пунктиром.</p>
+    </div>
+    <div class="card">
+      <span class="badge">Охранное поле · горизонтальная</span>
+      <div class="stage dark">
+        <div class="clear" style="padding:28px">
+          <span class="lbl">зазор = высота «b»</span>
+          <img src="logo47/horizontal-dark.svg" height="32" alt="">
+        </div>
+      </div>
+      <p class="why">В горизонтальном лока-апе высота «b» ≈ 88% стороны знака (28px при знаке 32px).</p>
+    </div>
+
+    <!-- 7. ЗАПРЕТЫ -->
+    <div class="card wide">
+      <span class="badge">Запрещено</span>
+      <div class="grid" style="margin-top:0">
+        <div class="dont stretched stage panel"><img src="logo47/horizontal-dark.svg" alt=""></div>
+        <div class="dont recolor stage panel"><img src="logo47/vertical-dark.svg" width="130" alt=""></div>
+        <div class="dont stage white"><img src="logo47/vertical-dark.svg" width="130" alt=""></div>
+        <div class="dont stage panel" style="flex-direction:column;gap:6px">
+          <div class="hdr" style="width:100%"><div class="bar" style="height:44px;padding:0 10px">
+            <img src="logo47/vertical-dark.svg" width="64" alt="">
+          </div></div>
+        </div>
+      </div>
+      <ul class="rules">
+        <li><b>Не растягивать</b> и не сжимать пропорции.</li>
+        <li><b>Не перекрашивать</b> вне палитры бренда.</li>
+        <li><b>Не ставить белую версию на светлый фон</b> — «scores» исчезает.</li>
+        <li><b>Не использовать двухстрочную версию в шапке</b> — только горизонтальная.</li>
+      </ul>
+    </div>
+
+    <!-- 8. ПАЛИТРА -->
+    <div class="card wide">
+      <span class="badge">Палитра</span>
+      <div class="swatches">
+        <div class="sw"><i style="background:#FFD700"></i><b>#FFD700 · интерфейс</b></div>
+        <div class="sw"><i style="background:#F5C518"></i><b>#F5C518 · градиент</b></div>
+        <div class="sw"><i style="background:#EDBE00"></i><b>#EDBE00 · акцент</b></div>
+        <div class="sw"><i style="background:#FFFFFF"></i><b>#FFFFFF · scores</b></div>
+        <div class="sw"><i style="background:#0A0D13"></i><b>#0A0D13 · фон</b></div>
+      </div>
+      <ul class="rules">
+        <li>Золото приведено к бренд-токенам <b>#FFD700 / #F5C518</b>; поле — «самый насыщенный акцент» <b>#EDBE00</b>.</li>
+        <li><b>Градиент — только в парадной двухстрочной версии.</b> В интерфейсе (шапка, футер, знак) — плоский цвет.</li>
+        <li>На светлом фоне «scores» → <b>#0A0D13</b>; в админ-теме (светлой) золото — <b>#b45309</b> (канон темы).</li>
+      </ul>
+    </div>
+  </div>
+</div>
+</body>
+</html>

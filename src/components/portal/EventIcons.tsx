@@ -1,0 +1,102 @@
+"use client";
+
+// Информативные иконки событий протокола: мяч — гол, карточка — ЖК/КК,
+// VAR-монитор с решением, круговые стрелки — замена. Акцент на «прочитывается
+// за полсекунды без текста», но текстовая подпись всегда рядом.
+
+import { cn } from "@/lib/utils";
+import { Check, RefreshCw, Video, X } from "lucide-react";
+
+/** Футбольный мяч: круг + центральный пятиугольник + швы к краям */
+export function BallIcon({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={cn("h-4 w-4", className)}>
+      <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M12 8.2 15.61 10.83 14.23 15.07 9.77 15.07 8.39 10.83Z" fill="currentColor" stroke="currentColor" strokeWidth="0.8" strokeLinejoin="round" />
+      <path
+        d="M12 8.2V3.4M15.61 10.83 20.56 9.23M14.23 15.07 17.28 19.27M9.77 15.07 6.72 19.27M8.39 10.83 3.44 9.23"
+        stroke="currentColor"
+        strokeWidth="1.3"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+/** Гол с пенальти: мяч + бейдж «П» — читается как «11-метровый» без текста */
+export function PenBallIcon({ className }: { className?: string }) {
+  return (
+    <span className={cn("relative inline-flex", className)} aria-hidden>
+      <BallIcon className="text-gold" />
+      <span className="absolute -bottom-[5px] -right-[7px] flex h-[11px] w-[11px] items-center justify-center rounded-full border border-sline bg-s1 leading-none">
+        <span className="text-[7px] font-black text-gold">П</span>
+      </span>
+    </span>
+  );
+}
+
+/** Карточка: жёлтая или красная — пропорция прямоугольника судейской
+ *  карточки 12×16px, скругление 2px, тонкая окантовка (Р-20) */
+export function CardIcon({ kind, className }: { kind: "yellow" | "red"; className?: string }) {
+  return (
+    <span
+      aria-hidden
+      className={cn("inline-block h-4 w-3 rounded-[2px] ring-1 ring-inset ring-black/25", className)}
+      style={{ background: kind === "yellow" ? "#fbbf24" : "#ef4444" }}
+    />
+  );
+}
+
+/** VAR: монитор + решение (✓ подтверждён / ✕ отменён / «П» пенальти) */
+export function VarIcon({ decision, className }: { decision: "confirm" | "cancel" | "penalty"; className?: string }) {
+  const tone = decision === "confirm" ? "text-ok" : decision === "cancel" ? "text-live" : "text-gold";
+  return (
+    <span className={cn("relative inline-flex items-center", className)} aria-hidden>
+      <Video className={cn("h-[18px] w-[18px]", tone)} />
+      <span className="absolute -bottom-[5px] -right-[7px] flex h-[11px] w-[11px] items-center justify-center rounded-full border border-sline bg-s1 leading-none">
+        {decision === "confirm" && <Check className="h-[8px] w-[8px] text-ok" strokeWidth={4} />}
+        {decision === "cancel" && <X className="h-[8px] w-[8px] text-live" strokeWidth={4} />}
+        {decision === "penalty" && <span className="text-[7px] font-black text-gold">П</span>}
+      </span>
+    </span>
+  );
+}
+
+/** Замена: круговые стрелки */
+export function SubIcon({ className }: { className?: string }) {
+  return <RefreshCw className={cn("h-4 w-4 text-ink2", className)} aria-hidden />;
+}
+
+/** Универсальная иконка события по типу (диспетчер).
+ *  v1.0.41: базовые размеры — компактные с ростом до 16px на ≥480px
+ *  (директива 2026-10-02: на узких экранах имена важнее иконок —
+ *  иконки мельчают, а не рушат строку). Карточки сохраняют пропорцию
+ *  судейской карточки 3:4. */
+export function EventIcon({ type, className }: { type: string; className?: string }) {
+  const sq = cn("h-3.5 w-3.5 min-[480px]:h-4 min-[480px]:w-4", className);
+  const card = cn("h-3.5 w-2.5 min-[480px]:h-4 min-[480px]:w-3", className);
+  switch (type) {
+    case "GOAL":
+      return <BallIcon className={cn("text-gold", sq)} />;
+    case "PENALTY":
+      return <PenBallIcon className={sq} />;
+    case "OWN_GOAL":
+      return <BallIcon className={cn("text-live", sq)} />;
+    case "YELLOW_CARD":
+      return <CardIcon kind="yellow" className={card} />;
+    case "RED_CARD":
+      return <CardIcon kind="red" className={card} />;
+    case "VAR_GOAL_CONFIRM":
+      return <VarIcon decision="confirm" className={className} />;
+    case "VAR_GOAL_CANCEL":
+      return <VarIcon decision="cancel" className={className} />;
+    case "VAR_PENALTY":
+      return <VarIcon decision="penalty" className={className} />;
+    case "SUBSTITUTION":
+    case "SUB_OUT":
+    case "SUB_IN":
+      return <SubIcon className={sq} />;
+    default:
+      return <SubIcon className={sq} />;
+  }
+}
