@@ -277,7 +277,7 @@ export default function ProtocolEventsTab({ matchId, data, onReload }: ProtocolT
 
       <Card className="border-zinc-200">
         <CardHeader className="pb-2">
-          <CardTitle className="text-base">Протокол · {data.events.length} событий</CardTitle>
+          <CardTitle className="text-base">Протокол</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {data.events.length === 0 ? (

@@ -13,6 +13,7 @@ import { assertNotSuspended } from "@/lib/engine/discipline";
 import { assertRefereeAssignmentAllowed } from "@/lib/engine/conflicts";
 import { assertMatchInScope } from "@/lib/scope";
 import { MATCH_OFFICIAL_ROLE_CODES, REFEREE_CONFLICT_CODES, roleName as officialRoleName } from "@/lib/roles";
+import { isStaffRole, STAFF_ROLE_CODES } from "@/lib/registration-roles";
 
 async function assertMatchAccess(matchId: string) {
   const user = await requireRole("REFEREE", "LEAGUE_ADMIN", "SUPER_ADMIN");
@@ -95,7 +96,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         person: { id: e.person.id, name: `${e.person.lastName} ${e.person.firstName}` },
         assist: e.assistPerson ? { id: e.assistPerson.id, name: `${e.assistPerson.lastName} ${e.assistPerson.firstName}` } : null,
       })),
-      lineup: lineups.map((l) => ({ teamId: l.teamId, personId: l.personId, isStarter: l.isStarter, isCaptain: l.isCaptain, number: l.number })),
+      lineup: lineups.map((l) => ({ teamId: l.teamId, personId: l.personId, isStarter: l.isStarter, isCaptain: l.isCaptain, number: l.number, staffRole: l.staffRole })),
       officials: match.officials.map((o) => ({
         id: o.id, role: o.role,
         person: { id: o.person.id, name: `${o.person.lastName} ${o.person.firstName}` },
@@ -199,6 +200,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
           // v1.0.34: капитан — один на команду в ЭТОМ матче (в протоколе,
           // меняется от матча к матче). Игрок из состава, не штаб.
           captainId?: string | null;
+          // v1.0.55 (feedback55 №4): должности в штабе НА МАТЧ —
+          // [{ personId, role }]. Роль можно назначить и ИГРОКУ состава
+          // (играющий помощник тренера, начальник команды-игрок);
+          // для заявки-штаба — переопределение роли на этот матч.
+          staffRoles?: { personId: string; role: string | null }[];
         };
         if (teamId !== match.homeTeamId && teamId !== match.awayTeamId) throw new HttpError(422, "Команда не участвует в матче");
         if (match.status === "COMPLETED" || match.status === "WALKOVER") throw new HttpError(409, "Матч уже завершён");
@@ -216,6 +222,24 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         const eligible = await getEligiblePlayers(id, teamId);
         const isStaff = new Set(eligible.filter((p) => p.regRole !== "PLAYER").map((p) => p.personId));
         const nameOf = new Map(eligible.map((p) => [p.personId, p.name]));
+
+        // v1.0.55 (feedback55 №4) · валидация должностей штаба матча: код из
+        // единого списка lib/registration-roles.ts (STAFF_ROLE_CODES, без
+        // PLAYER); должность — только участнику протокола; null/"" — сброс
+        const staffRoleMap = new Map<string, string>();
+        if (Array.isArray((body as { staffRoles?: unknown }).staffRoles)) {
+          for (const row of (body as { staffRoles: { personId?: unknown; role?: unknown }[] }).staffRoles) {
+            if (!row || typeof row.personId !== "string") continue;
+            if (row.role === null || row.role === undefined || row.role === "") continue;
+            if (typeof row.role !== "string" || !isStaffRole(row.role)) {
+              throw new HttpError(422, `Должность в штабе «${String(row.role)}» не распознана. Допустимо: ${STAFF_ROLE_CODES.join(", ")}`);
+            }
+            if (!uniqueIds.includes(row.personId)) {
+              throw new HttpError(422, `Штаб: ${nameOf.get(row.personId) ?? row.personId} не в составе этого матча`);
+            }
+            staffRoleMap.set(row.personId, row.role.trim());
+          }
+        }
 
         if (match.stage) {
           for (const personId of uniqueIds) {
@@ -281,12 +305,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
               // v1.0.28: только номера, введённые при заполнении протокола —
               // автоматическая нумерация «по порядку списка» убрана
               number: numberMap.get(personId) ?? null,
+              // v1.0.55: должность в штабе на этот матч (игроку — «играющий
+              // сотрудник», заявке-штабу — переопределение на матч)
+              staffRole: staffRoleMap.get(personId) ?? null,
             })),
           }),
         ]);
         await audit(user, "Lineup", `${id}:${teamId}`, "UPDATE",
-          old.map((l) => ({ personId: l.personId, isStarter: l.isStarter, isCaptain: l.isCaptain, number: l.number })),
-          uniqueIds.map((p) => ({ personId: p, isStarter: starterSet.has(p), isCaptain: captain === p, number: numberMap.get(p) ?? null })));
+          old.map((l) => ({ personId: l.personId, isStarter: l.isStarter, isCaptain: l.isCaptain, number: l.number, staffRole: l.staffRole })),
+          uniqueIds.map((p) => ({ personId: p, isStarter: starterSet.has(p), isCaptain: captain === p, number: numberMap.get(p) ?? null, staffRole: staffRoleMap.get(p) ?? null })));
         return Response.json({ ok: true, starters: starterSet.size, bench: uniqueIds.length - starterSet.size, numbered: numberMap.size });
       }
 

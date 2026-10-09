@@ -346,6 +346,14 @@ model LineupEntry {
   /// в редакторе протокола. Живёт в протоколе — капитан меняется от матча к матчу.
   isCaptain Boolean @default(false)
   number   Int?
+  /// v1.0.55 (feedback55 №4): должность в штабе НА ЭТОТ МАТЧ (код из
+  /// lib/registration-roles.ts: ASSISTANT_COACH, TEAM_MANAGER, DOCTOR…).
+  /// NULL — обычный участник. У заявки-штаба (Registration.role != PLAYER)
+  /// дублирует/переопределяет роль заявки на матч; у ИГРОКА — «играющий
+  /// сотрудник» (игрок + должность: числится и в составе, и в штабе).
+  /// Публичная страница показывает штаб = строки с regRole != PLAYER
+  /// ИЛИ staffRole != null (роль для показа: staffRole ?? regRole).
+  staffRole String?
   createdAt DateTime @default(now())
 
   @@unique([matchId, personId])

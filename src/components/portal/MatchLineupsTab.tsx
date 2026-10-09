@@ -55,6 +55,10 @@ export interface LineupRow {
   isCaptain?: boolean;
   number: number | null;
   regRole: string;
+  /** v1.0.55 (feedback55 №4): должность в штабе НА ЭТОТ МАТЧ — у игрока
+   *  это «играющий сотрудник» (числится и в составе, и в штабе),
+   *  у заявки-штаба — переопределение роли на матч */
+  staffRole?: string | null;
 }
 
 export type LineupsMatch = MatchDTO & {
@@ -80,9 +84,14 @@ interface SideData {
 function buildSide(m: LineupsMatch, team: TeamRef): SideData {
   const rows = m.lineups.filter((l) => l.teamId === team.id);
   const players = rows.filter((l) => l.regRole === "PLAYER");
+  // v1.0.55 (feedback55 №4): штаб = заявка-штаб ИЛИ персона с должностью
+  // НА МАТЧ (staffRole). Игрок с должностью — «играющий сотрудник»:
+  // показывается и в составе (со своим номером), и в штабе (с ролью).
+  // Подпись роли: staffRole (переопределение на матч) ?? regRole (заявка).
+  const effRole = (l: LineupRow) => l.staffRole ?? l.regRole;
   const staff = rows
-    .filter((l) => l.regRole !== "PLAYER")
-    .sort((a, b) => Number(b.regRole === "COACH") - Number(a.regRole === "COACH"));
+    .filter((l) => l.regRole !== "PLAYER" || l.staffRole != null)
+    .sort((a, b) => Number(effRole(b) === "COACH") - Number(effRole(a) === "COACH"));
   const byNum = (a: LineupRow, b: LineupRow) => (a.number ?? 999) - (b.number ?? 999);
   const starters = players.filter((l) => l.isStarter).sort(byNum);
   const bench = players.filter((l) => !l.isStarter).sort(byNum);
@@ -338,9 +347,11 @@ function PlayerCell({
   );
 }
 
-/** Ячейка сотрудника штаба: аватар + имя + роль (у гостей — зеркально) */
+/** Ячейка сотрудника штаба: аватар + имя + роль (у гостей — зеркально).
+ *  v1.0.55: роль — должность на этот матч (staffRole) либо роль заявки */
 function StaffCell({ l, side, className }: { l: LineupRow; side: "left" | "right"; className?: string }) {
-  const role = REGISTRATION_ROLE_LABELS[l.regRole] ?? l.regRole;
+  const roleCode = l.staffRole ?? l.regRole;
+  const role = REGISTRATION_ROLE_LABELS[roleCode] ?? roleCode;
   return (
     <button
       className={cn("flex min-w-0 items-center gap-2 py-1.5 text-left", side === "right" && "justify-end", className)}

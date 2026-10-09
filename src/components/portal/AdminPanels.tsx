@@ -368,7 +368,12 @@ export function RegistrationsPanel({ seasonId, bump, version = 0, onOpenTeam, on
           </div>
           <div className="flex items-center gap-2 lg:col-span-4">
             <Switch checked={endPrevious} onCheckedChange={setEndPrevious} id="endprev" />
-            <Label htmlFor="endprev" className="text-xs text-zinc-500">Закрыть предыдущую активную заявку игрока (трансфер)</Label>
+            <Label htmlFor="endprev" className="text-xs text-zinc-500" title="Закрываются только активные заявки ЭТОГО же сезона (трансфер внутри лиги). Заявки в других лигах не трогаются: игрок может одновременно числиться за команду первенства и команду чемпионата — сквозная заявка.">
+              Закрыть предыдущую активную заявку игрока (трансфер)
+            </Label>
+            <span className="text-xs text-zinc-400" title="Сквозная заявка: заявите игрока отдельно в каждом турнире — сезон первенства и сезон чемпионата независимы, переключатель «трансфер» на них не влияет.">
+              · действует только внутри сезона этого турнира
+            </span>
           </div>
           {refereeWarn && (
             <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-700 lg:col-span-4">

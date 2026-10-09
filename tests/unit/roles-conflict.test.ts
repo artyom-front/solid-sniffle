@@ -13,6 +13,7 @@ import {
   MATCH_OFFICIAL_ROLES,
 } from "@/lib/roles";
 import { IMPORT_SPECS, buildTemplateCsv, templateText, IMPORT_RULES } from "@/lib/importTemplates";
+import { STAFF_ROLE_OPTIONS, STAFF_ROLE_CODES, isStaffRole, REGISTRATION_ROLE_CODES } from "@/lib/registration-roles";
 
 // ============================================================
 // v1.0.34 · Судейский корпус — единая роль на карточке.
@@ -87,16 +88,52 @@ describe("Судейский корпус · единая роль (v1.0.34)", (
     expect(roleName("c:abc")).toBe("c:abc");
   });
 
-  test("карточных ролей — 13: 11 команда + 1 корпус + 1 медицина (v1.0.52: + Директор)", () => {
-    expect(SYSTEM_ROLES).toHaveLength(13);
+  test("карточных ролей — 14: 12 команда + 1 корпус + 1 медицина (v1.0.52: + Директор; v1.0.55: + Начальник команды)", () => {
+    expect(SYSTEM_ROLES).toHaveLength(14);
     for (const r of SYSTEM_ROLES) {
       expect(["team", "officials", "medicine"]).toContain(r.group);
     }
-    expect(SYSTEM_ROLES.filter((r) => r.group === "team")).toHaveLength(11);
+    expect(SYSTEM_ROLES.filter((r) => r.group === "team")).toHaveLength(12);
     expect(SYSTEM_ROLES.filter((r) => r.group === "officials")).toHaveLength(1);
     expect(SYSTEM_ROLES.filter((r) => r.group === "medicine")).toHaveLength(1);
     // v1.0.52: роль «Директор» — заявочная административная роль
     expect(SYSTEM_ROLES.find((r) => r.code === "DIRECTOR")?.name).toBe("Директор");
+    // v1.0.55 (feedback55 №4): «Начальник команды» — для заявки и штаба матча
+    expect(SYSTEM_ROLES.find((r) => r.code === "TEAM_MANAGER")?.name).toBe("Начальник команды");
+  });
+
+  // ============================================================
+  // v1.0.55 (feedback55 №4) · ШТАБ НА МАТЧ (LineupEntry.staffRole):
+  // игрок может получить должность в штабе конкретного матча
+  // («играющий помощник тренера», «начальник команды-игрок»).
+  // ============================================================
+  describe("Штаб матча · должности (v1.0.55)", () => {
+    test("в списке штаба нет PLAYER — только сотрудники", () => {
+      expect(STAFF_ROLE_OPTIONS.some((o) => (o.code as string) === "PLAYER")).toBe(false);
+      expect(STAFF_ROLE_CODES).not.toContain("PLAYER");
+    });
+
+    test("помощник тренера и начальник команды доступны для штаба матча", () => {
+      expect(STAFF_ROLE_CODES).toContain("ASSISTANT_COACH");
+      expect(STAFF_ROLE_CODES).toContain("TEAM_MANAGER");
+      expect(STAFF_ROLE_CODES).toContain("COACH");
+      expect(STAFF_ROLE_CODES).toContain("DOCTOR");
+    });
+
+    test("валидация: код из списка проходит, мусор и PLAYER — нет", () => {
+      expect(isStaffRole("ASSISTANT_COACH")).toBe(true);
+      expect(isStaffRole(" TEAM_MANAGER ")).toBe(true); // трим
+      expect(isStaffRole("PLAYER")).toBe(false);
+      expect(isStaffRole("BANANA")).toBe(false);
+      expect(isStaffRole(42)).toBe(false);
+      expect(isStaffRole(null)).toBe(false);
+    });
+
+    test("роли штаба и роли заявки согласованы (штаб ⊂ заявки без PLAYER)", () => {
+      for (const code of STAFF_ROLE_CODES) {
+        expect(REGISTRATION_ROLE_CODES).toContain(code);
+      }
+    });
   });
 
   test("должности бригады матча — полный набор (главный…врач)", () => {

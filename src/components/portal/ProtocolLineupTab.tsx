@@ -29,6 +29,7 @@ import { Ban, CalendarClock, CheckCircle2, Hash, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { apiPost } from "./hooks";
 import { STARTER_LIMITS, REGISTRATION_ROLE_LABELS } from "@/lib/labels";
+import { STAFF_ROLE_OPTIONS } from "@/lib/registration-roles";
 import type { SessionUserDTO } from "./types";
 
 export interface EligiblePlayer {
@@ -64,7 +65,7 @@ export interface ProtocolData {
   };
   eligible: { home: EligiblePlayer[]; away: EligiblePlayer[] };
   events: { id: string; minute: number; stoppage: number | null; type: string; teamId: string; person: { id: string; name: string }; assist: { id: string; name: string } | null }[];
-  lineup: { teamId: string; personId: string; isStarter: boolean; isCaptain: boolean; number: number | null }[];
+  lineup: { teamId: string; personId: string; isStarter: boolean; isCaptain: boolean; number: number | null; staffRole: string | null }[];
   officials: { id: string; role: string; person: { id: string; name: string } }[];
   referees: { id: string; name: string }[];
 }
@@ -89,6 +90,11 @@ interface Overrides {
   /** v1.0.34 · капитан: personId или null (явный сброс) — один на команду */
   homeCaptain?: string | null;
   awayCaptain?: string | null;
+  /** v1.0.55 (feedback55 №4) · должности в штабе НА МАТЧ:
+   *  явные правки поверх БД (pid → код роли | null-сброс).
+   *  Персона попадает в штаб и как игрок — «играющий сотрудник» */
+  homeStaffRoles?: Record<string, string | null>;
+  awayStaffRoles?: Record<string, string | null>;
 }
 
 export default function ProtocolLineupTab({ matchId, data, onReload }: Props) {
@@ -134,6 +140,9 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
   const eligibleSide = data.eligible[side];
   // v1.0.46 · подтверждение переноса даты поздних заявок
   const [lateConfirm, setLateConfirm] = useState(false);
+  // v1.0.55 · форма «+ добавить в штаб»: кандидат + должность
+  const [staffAddId, setStaffAddId] = useState("");
+  const [staffAddRole, setStaffAddRole] = useState("ASSISTANT_COACH");
   const players = useMemo(
     () => eligibleSide.filter((p) => p.regRole === "PLAYER"),
     [eligibleSide]
@@ -155,12 +164,44 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
   /** v1.0.34: капитан из БД (первая запись с isCaptain) */
   const savedCaptain = useMemo(() => saved.find((l) => l.isCaptain)?.personId ?? null, [saved]);
 
+  // ---------- v1.0.55 (feedback55 №4) · ШТАБ НА МАТЧ ----------
+  // сохранённые должности из БД (протокол матча)
+  const savedStaffRoles = useMemo(() => {
+    const map = new Map<string, string | null>();
+    for (const l of saved) map.set(l.personId, l.staffRole);
+    return map;
+  }, [saved]);
+  // явные правки (pid → роль | null-сброс)
+  const staffRoleKey = side === "home" ? "homeStaffRoles" : "awayStaffRoles";
+  const explicitStaffRoles = overrides[staffRoleKey] ?? {};
+  /** эффективная должность: правка → БД → роль заявки (штаб) → null */
+  const effStaffRole = (pid: string): string | null => {
+    if (pid in explicitStaffRoles) return explicitStaffRoles[pid];
+    const fromDb = savedStaffRoles.get(pid);
+    if (fromDb) return fromDb;
+    const p = eligibleSide.find((x) => x.personId === pid);
+    return p && p.regRole !== "PLAYER" ? p.regRole : null;
+  };
+  const setStaffRole = (pid: string, role: string | null) => {
+    setOverrides((s) => ({
+      ...s,
+      [staffRoleKey]: { ...(s[staffRoleKey] ?? {}), [pid]: role },
+    }));
+  };
+  /** все, у кого сейчас есть должность (заявка-штаб + игроки + правки) */
+  const staffOfMatch = eligibleSide.filter((p) => effStaffRole(p.personId) != null);
+  const playersInStaff = staffOfMatch.filter((p) => p.regRole === "PLAYER");
+  /** кандидаты на добавление: без должности сейчас */
+  const staffCandidates = eligibleSide.filter((p) => effStaffRole(p.personId) == null && !p.suspension);
+
   // текущее состояние = БД + оверрайды
   const sel = overrides[side] ?? savedSet;
   const captainKey = `${side}Captain` as "homeCaptain" | "awayCaptain";
   const captain = overrides[captainKey] !== undefined ? overrides[captainKey] : savedCaptain;
   const starters = overrides[`${side}Starters` as const] ?? savedStarters;
   const numberEdits = overrides[`${side}Numbers` as const];
+  /** штаб этого матча, включённый в протокол (для счётчика/тостов) */
+  const selectedStaffOfMatch = staffOfMatch.filter((p) => sel.has(p.personId));
 
   /** эффективный номер: правка → сохранённый → последний в команде → заявка */
   const numberValue = (pid: string): number | null => {
@@ -194,13 +235,19 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
   })();
   const hasDup = dupNumbers.length > 0;
 
-  // dirty: состав/старт/номера/капитан отличаются от сохранённых
+  // dirty: состав/старт/номера/капитан/штаб отличаются от сохранённых
   const dirty = (() => {
     const sameSet = sel.size === savedSet.size && [...sel].every((id) => savedSet.has(id));
     const sameStart = starters.size === savedStarters.size && [...starters].every((id) => savedStarters.has(id));
     const sameNums = selectedPlayers.every((p) => (numberValue(p.personId) ?? null) === (savedNumbers[p.personId] ?? null));
     const sameCap = (captain ?? null) === (savedCaptain ?? null);
-    return !sameSet || !sameStart || !sameNums || !sameCap;
+    // v1.0.55: должности штаба — правки против БД
+    const savedRoleMap: Record<string, string | null> = {};
+    for (const [pid, r] of savedStaffRoles) if (r != null) savedRoleMap[pid] = r;
+    const sameStaff = Object.keys({ ...savedRoleMap, ...explicitStaffRoles }).every(
+      (pid) => (explicitStaffRoles[pid] ?? null) === (savedRoleMap[pid] ?? null)
+    );
+    return !sameSet || !sameStart || !sameNums || !sameCap || !sameStaff;
   })();
 
   const setNumEdit = (pid: string, value: number | null) => {
@@ -320,7 +367,39 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
       [`${side}Starters` as const]: new Set<string>(),
       [`${side}Numbers` as const]: {},
       [`${side}Captain` as const]: null,
+      [staffRoleKey]: {},
     }));
+  };
+
+  /** v1.0.55 · добавить сотрудника в штаб матча: кандидата нет в протоколе —
+   *  попадает туда (игрок — в запас, заявка-штаб — без старта) + должность */
+  const addStaffToMatch = () => {
+    const person = eligibleSide.find((p) => p.personId === staffAddId);
+    if (!person) return toast.error("Выберите человека");
+    if (person.suspension) return toast.error(`У ${person.name} активная дисквалификация`);
+    setOverrides((s) => {
+      const selKey = side as "home" | "away";
+      const startKey = `${side}Starters` as "homeStarters" | "awayStarters";
+      const wasInProtocol = (s[selKey] ?? sel).has(person.personId);
+      const nextSel = new Set(s[selKey] ?? sel);
+      const nextStart = new Set(s[startKey] ?? starters);
+      nextSel.add(person.personId);
+      // новичок-игрок входит в протокол как ЗАПАСНОЙ (не занимает место старта);
+      // уже играющий (в старте) сохраняет своё место — «играющий сотрудник»
+      if (person.regRole === "PLAYER" && !wasInProtocol) nextStart.delete(person.personId);
+      return {
+        ...s,
+        [selKey]: nextSel,
+        [startKey]: nextStart,
+        [staffRoleKey]: { ...(s[staffRoleKey] ?? {}), [person.personId]: staffAddRole },
+      };
+    });
+    toast.success(
+      `${person.name} — ${STAFF_ROLE_OPTIONS.find((o) => o.code === staffAddRole)?.name ?? staffAddRole}${
+        person.regRole === "PLAYER" ? " (игрок — числится и в составе, и в штабе)" : ""
+      }`
+    );
+    setStaffAddId("");
   };
 
   async function submitLineup(overrideLate = false) {
@@ -358,6 +437,11 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
     const numbers = selectedPlayers
       .map((p) => ({ personId: p.personId, number: numberValue(p.personId) }))
       .filter((n) => n.number != null);
+    // v1.0.55 · должности штаба на матч: каждый участник протокола с ролью
+    // (заявка-штаб — своя роль заявки, игрок — «играющий сотрудник»)
+    const staffRoles = personIds
+      .map((pid) => ({ personId: pid, role: effStaffRole(pid) }))
+      .filter((r): r is { personId: string; role: string } => r.role != null);
     const res = await apiPost(`/api/admin/matches/${matchId}`, {
       action: "lineup",
       teamId: team.id,
@@ -365,6 +449,7 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
       starters: starterIds,
       numbers,
       captainId: captain && sel.has(captain) ? captain : null,
+      staffRoles,
     });
     setBusy(false);
     if (!res.ok) {
@@ -372,7 +457,7 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
       return;
     }
     toast.success(
-      `Состав ${team.name} подан: старт ${starterIds.length}, запас ${personIds.length - starterIds.length - selectedStaff.length}, штат ${selectedStaff.length}`
+      `Состав ${team.name} подан: старт ${starterIds.length}, запас ${personIds.length - starterIds.length - selectedStaff.length}, штат ${staffRoles.length}`
     );
     setLateConfirm(false);
     onReload();
@@ -410,7 +495,7 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
             <X className="mr-1 h-3 w-3 text-zinc-400" /> Снять
           </Button>
           <span className={cn("ml-auto text-xs font-semibold", starterCount > limit ? "text-red-600" : "text-zinc-400")}>
-            старт {starterCount}/{limit} · запас {selectedPlayers.length - starterCount} · штат {selectedStaff.length}
+            старт {starterCount}/{limit} · запас {selectedPlayers.length - starterCount} · штат {selectedStaffOfMatch.length}
           </span>
         </div>
 
@@ -434,7 +519,8 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
           Отметьте игроков — первые {limit} попадают в старт, остальные в запас. Номер вводится на матч:
           подставляется последний номер игрока в команде (или из заявки), можно изменить. Кнопка «К» —
           капитан (один на команду; смена — сначала снять прежнего повторным кликом, затем назначить нового).
-          Затем добавьте тренера и руководство — без номеров.
+          Затем добавьте тренера и руководство — без номеров; игрока можно назначить и в штаб
+          (играющий помощник) — блок «+ В штаб на этот матч».
         </p>
 
         {/* v1.0.46 · откуда берётся список: заявки сезона на дату матча */}
@@ -459,6 +545,8 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
             const num = numberValue(p.personId);
             const numStr = num == null ? "" : String(num);
             const inDup = hasDup && isSelected && num != null && dupNumbers.some(([n]) => n === num);
+            // v1.0.55: игрок с должностью в штабе матча — пометка в списке
+            const staffTag = effStaffRole(p.personId);
             return (
               <div
                 key={p.personId}
@@ -481,6 +569,14 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
                   </span>
                   <span className="flex-1 truncate font-medium">{p.name}</span>
                   {p.position && <span className="shrink-0 text-xs text-zinc-400">{p.position}</span>}
+                  {staffTag && (
+                    <span
+                      className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-700"
+                      title="Должность в штабе этого матча"
+                    >
+                      {REGISTRATION_ROLE_LABELS[staffTag] ?? staffTag}
+                    </span>
+                  )}
                   {/* v1.0.46 · поздняя заявка: видно, почему игрок «не заявлен на дату» */}
                   {!p.registrationOk && (
                     <span
@@ -559,6 +655,45 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
             );
           })}
 
+          {/* ---------- v1.0.55 (feedback55 №4) · игроки с должностями в штабе:
+              «играющий сотрудник» — числится и в составе, и в штабе ---------- */}
+          {playersInStaff.length > 0 && (
+            <>
+              <p className="px-1 pb-0.5 pt-3 text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+                Штаб матча · игроки с должностями
+              </p>
+              {playersInStaff.map((p) => {
+                const role = effStaffRole(p.personId);
+                return (
+                  <div key={p.personId} className="flex w-full items-center gap-2 rounded-lg border border-amber-200 bg-amber-50/60 px-2.5 py-1.5 text-sm">
+                    <span className="min-w-0 flex-1 truncate font-medium">{p.name}</span>
+                    {p.position && <span className="shrink-0 text-xs text-zinc-400">{p.position}</span>}
+                    <select
+                      value={role ?? ""}
+                      onChange={(e) => setStaffRole(p.personId, e.target.value || null)}
+                      className="h-7 shrink-0 rounded-md border border-zinc-200 bg-white px-1.5 text-xs"
+                      title="Должность в штабе на этот матч"
+                    >
+                      <option value="">— без должности —</option>
+                      {STAFF_ROLE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
+                    </select>
+                    <button
+                      onClick={() => setStaffRole(p.personId, null)}
+                      className="shrink-0 rounded-md p-1 text-zinc-400 transition-colors hover:bg-zinc-100 hover:text-red-500"
+                      title="Убрать из штаба (останется в составе как игрок)"
+                      aria-label={`Убрать ${p.name} из штаба`}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+              <p className="px-1 text-[10px] leading-snug text-zinc-400">
+                Играющий сотрудник: числится и в составе (номер/старт — в списке игроков), и в штабе.
+              </p>
+            </>
+          )}
+
           {/* ---------- Штаб и руководство ---------- */}
           {staff.length > 0 && (
             <>
@@ -601,14 +736,63 @@ function TeamLineupCard({ matchId, data, side, limit, overrides, setOverrides, b
                         </span>
                       )}
                     </button>
-                    <Badge variant="outline" className="shrink-0 border-zinc-200 font-normal text-zinc-500">
-                      {REGISTRATION_ROLE_LABELS[p.regRole] ?? p.regRole}
-                    </Badge>
+                    {/* v1.0.55: должность заявки можно переопределить НА МАТЧ */}
+                    {isSelected && !suspended ? (
+                      <select
+                        value={effStaffRole(p.personId) ?? p.regRole}
+                        onChange={(e) => setStaffRole(p.personId, e.target.value || null)}
+                        className="h-7 shrink-0 rounded-md border border-zinc-200 bg-white px-1.5 text-xs"
+                        title="Должность в штабе на этот матч (по умолчанию — роль из заявки)"
+                      >
+                        {STAFF_ROLE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
+                      </select>
+                    ) : (
+                      <Badge variant="outline" className="shrink-0 border-zinc-200 font-normal text-zinc-500">
+                        {REGISTRATION_ROLE_LABELS[p.regRole] ?? p.regRole}
+                      </Badge>
+                    )}
                   </div>
                 );
               })}
             </>
           )}
+        </div>
+
+        {/* ---------- v1.0.55 (feedback55 №4) · добавить в штаб на этот матч ---------- */}
+        <div className="space-y-1.5 rounded-lg border border-dashed border-zinc-300 bg-zinc-50/60 p-2.5">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-zinc-500">
+            + В штаб на этот матч
+          </p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <select
+              value={staffAddId}
+              onChange={(e) => setStaffAddId(e.target.value)}
+              className="h-8 min-w-[170px] flex-1 rounded-md border border-zinc-200 bg-white px-2 text-sm"
+              title="Любой из заявки: сотрудник или игрок (играющий помощник тренера, начальник команды)"
+            >
+              <option value="">— выбрать человека —</option>
+              {staffCandidates.map((p) => (
+                <option key={p.personId} value={p.personId}>
+                  {p.name}{p.regRole === "PLAYER" ? " (игрок)" : ` (${REGISTRATION_ROLE_LABELS[p.regRole] ?? p.regRole})`}
+                </option>
+              ))}
+            </select>
+            <select
+              value={staffAddRole}
+              onChange={(e) => setStaffAddRole(e.target.value)}
+              className="h-8 rounded-md border border-zinc-200 bg-white px-2 text-sm"
+              title="Должность на этот матч"
+            >
+              {STAFF_ROLE_OPTIONS.map((o) => <option key={o.code} value={o.code}>{o.name}</option>)}
+            </select>
+            <Button size="sm" variant="outline" className="h-8 border-zinc-200 px-2.5 text-xs" disabled={!staffAddId} onClick={addStaffToMatch}>
+              <Users className="mr-1 h-3 w-3 text-emerald-600" /> В штаб
+            </Button>
+          </div>
+          <p className="text-[10px] leading-snug text-zinc-400">
+            Игрок попадает в протокол (запас) и в штаб — «играющий сотрудник». Сотрудники и помощники —
+            из заявки команды; судейская бригада матча — на вкладке «Бригада».
+          </p>
         </div>
 
         <Button

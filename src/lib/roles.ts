@@ -58,6 +58,9 @@ export const SYSTEM_ROLES: RoleDef[] = [
   { code: "PRESS_OFFICER", name: "Пресс-атташе", group: "team" },
   { code: "PRESIDENT", name: "Президент / председатель", group: "team" },
   { code: "GENERAL_MANAGER", name: "Генеральный менеджер", group: "team" },
+  // v1.0.55 (feedback55 №4): начальник команды — отдельная роль (не «администратор»):
+  // в любительской практике это играющий руководитель в протоколе матча
+  { code: "TEAM_MANAGER", name: "Начальник команды", group: "team" },
   { code: "DIRECTOR", name: "Директор", group: "team" },
   { code: "ADMINISTRATOR", name: "Администратор", group: "team" },
   { code: "MASSEUR", name: "Массажист", group: "team" },
@@ -103,6 +106,7 @@ export const REGISTRATION_ROLES: { code: string; name: string }[] = [
   { code: "MASSEUR", name: "Массажист" },
   { code: "PRESIDENT", name: "Президент / председатель" },
   { code: "GENERAL_MANAGER", name: "Генеральный менеджер" },
+  { code: "TEAM_MANAGER", name: "Начальник команды" },
   { code: "DOCTOR", name: "Врач" },
 ];
 

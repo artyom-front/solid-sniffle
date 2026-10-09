@@ -2,7 +2,7 @@
 
 // Дисциплинарные санкции «Ночь под прожекторами»: активные баны и история.
 
-import { Info, Ban, Clock } from "lucide-react";
+import { Ban, Clock } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFetch, fmtDate } from "./hooks";
 import type { SuspensionDTO } from "./types";
@@ -23,13 +23,8 @@ export default function DisciplineView({ seasonId, version, onOpenPlayer }: { se
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start gap-2 rounded-xl border border-sline bg-s1 p-3 text-xs text-ink2">
-        <Info className="mt-0.5 h-4 w-4 shrink-0 text-gold" />
-        <p>
-          Красная карточка — автоматический пропуск следующего матча турнира. Каждые 3 жёлтые карточки — пропуск 1 матча.
-          Комитет по дисциплине (КДК) вправе ужесточить санкцию или назначить пожизненную дисквалификацию.
-        </p>
-      </div>
+      {/* feedback55 №2: регламентные подсказки («красная — пропуск, 3 жёлтых…»)
+          убраны — занимали место и отвлекали; правила — в регламенте лиги */}
 
       <div className="overflow-hidden rounded-xl border border-live/30 bg-s1">
         <div className="flex items-center gap-2 border-b border-live/20 bg-live/10 px-4 py-2.5 text-sm font-semibold text-live">

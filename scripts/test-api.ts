@@ -185,3 +185,6 @@ function check(name, cond, extra = "") {
   console.log(`ИТОГО: ✅ ${passed} прошло, ❌ ${failed} упало`);
   process.exit(failed > 0 ? 1 : 0);
 })();
+
+// module-маркер: глобальные const в скриптах конфликтуют в tsc (TS2451)
+export {};

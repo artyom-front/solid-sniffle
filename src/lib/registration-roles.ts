@@ -21,6 +21,7 @@ export const REGISTRATION_ROLE_OPTIONS = [
   { code: "GOALKEEPER_COACH", name: "Тренер вратарей" },
   { code: "FITNESS_COACH", name: "Тренер по физподготовке" },
   { code: "ADMINISTRATOR", name: "Администратор" },
+  { code: "TEAM_MANAGER", name: "Начальник команды" },
   { code: "DIRECTOR", name: "Директор" },
   { code: "DELEGATE", name: "Делегат" },
   { code: "DOCTOR", name: "Врач" },
@@ -35,3 +36,18 @@ export function isRegistrationRole(value: unknown): value is string {
 
 /** Человекочитаемый список допустимых ролей для текста ошибок API */
 export const REGISTRATION_ROLE_CODES_TEXT = REGISTRATION_ROLE_CODES.join(", ");
+
+/** ============================================================
+ *  v1.0.55 (feedback55 №4) · роли ШТАБА на конкретный матч
+ *  (LineupEntry.staffRole). Подмножество ролей заявки без PLAYER:
+ *  так «игрок» совмещается с должностью в штабе матча
+ *  (играющий помощник тренера, начальник команды-игрок).
+ *  ЕДИНЫЙ источник для валидации API и списка в редакторе протокола.
+ *  ============================================================ */
+export const STAFF_ROLE_OPTIONS = REGISTRATION_ROLE_OPTIONS.filter((o) => o.code !== "PLAYER");
+
+export const STAFF_ROLE_CODES: readonly string[] = STAFF_ROLE_OPTIONS.map((o) => o.code);
+
+export function isStaffRole(value: unknown): value is string {
+  return typeof value === "string" && STAFF_ROLE_CODES.includes(value.trim());
+}

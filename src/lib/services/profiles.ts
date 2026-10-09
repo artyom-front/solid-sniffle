@@ -269,6 +269,11 @@ export async function getMatchDetail(id: string) {
         isCaptain: l.isCaptain,
         number: l.number,
         regRole: regRoleMap.get(`${l.teamId}:${l.personId}`) ?? "PLAYER",
+        // v1.0.55 (feedback55 №4): должность в штабе НА МАТЧ. У заявки-штаба —
+        // переопределение, у игрока — «играющий сотрудник»: числится и в
+        // составе, и в штабе. Публичные «Составы»: штаб = regRole != PLAYER
+        // ИЛИ staffRole; подпись роли — staffRole ?? regRole.
+        staffRole: l.staffRole ?? null,
       })),
       ratings: match.ratings.map((r) => ({
         id: r.id,

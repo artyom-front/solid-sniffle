@@ -143,9 +143,11 @@ export default function MatchPage({ matchId, initial }: Props) {
   const score = matchScore(m);
   // время/дата начала — для статуса шапки (Р-17/Р-18)
   const kickoffTime = new Date(m.kickoff).toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
-  const tabs: { id: Tab; label: string; count?: number; hidden?: boolean }[] = [
+  // feedback55 №1: счётчики в подписях вкладок убраны — цифра «Протокол · 14»
+  // лишь дублирует контент вкладки и отвлекает (в одном духе с feedback54 №9)
+  const tabs: { id: Tab; label: string; hidden?: boolean }[] = [
     { id: "preview", label: "Превью" },
-    { id: "timeline", label: "Протокол", count: m.events.length || undefined },
+    { id: "timeline", label: "Протокол" },
     { id: "lineups", label: "Составы", hidden: !hasLineups },
     { id: "table", label: "Таблица", hidden: data.standings.length === 0 },
   ];
@@ -250,7 +252,7 @@ export default function MatchPage({ matchId, initial }: Props) {
       </div>
 
       {/* ---------- Вкладки: 13px/600, активная — золото + подчёркивание
-          2px; счётчик событий — серым («Протокол · 6») ---------- */}
+          2px (счётчик событий убран, feedback55 №1) ---------- */}
       <div className="overflow-hidden rounded-lg border border-sline bg-s1">
         <div className="flex gap-1 overflow-x-auto border-b border-sline/60 px-2 scrollbar-none">
           {tabs.filter((t) => !t.hidden).map((t) => (
@@ -265,7 +267,6 @@ export default function MatchPage({ matchId, initial }: Props) {
               )}
             >
               {t.label}
-              {t.count != null && <span className="ml-1 text-ink3">· {t.count}</span>}
               {tab === t.id && <span className="absolute inset-x-3 bottom-0 h-0.5 bg-gold" />}
             </button>
           ))}
