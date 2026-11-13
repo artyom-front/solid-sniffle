@@ -37,12 +37,16 @@ import { X, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, RotateCcw } from "lucide
 import { cn } from "@/lib/utils";
 
 /** Одна картинка лайтбокса: url + ОСМЫСЛЕННЫЙ alt (имя игрока,
- *  название команды) + необязательная подпись-«caption» в шапке. */
+ *  название команды) + необязательная подпись-«caption» в шапке.
+ *  video: true → рендер <video> (mp4/webm моменты, v1.0.56) вместо <img>:
+ *  зум/панорама к видео не применяются. */
 export interface LightboxImage {
   url: string;
   alt: string;
   /** подпись рядом со счётчиком (например, ФИО персоны) */
   caption?: string;
+  /** видео-медиа (mp4/webm): проигрывается, а не рассматривается */
+  video?: boolean;
 }
 
 const MIN_SCALE = 1;
@@ -354,6 +358,16 @@ export function Lightbox({
             <ChevronLeft className="h-7 w-7" />
           </button>
         )}
+        {current.video ? (
+          <video
+            src={current.url}
+            controls
+            playsInline
+            preload="metadata"
+            className="max-h-[92dvh] max-w-[94vw] select-none rounded-lg bg-black"
+            onClick={(e) => e.stopPropagation()}
+          />
+        ) : (
         <img
           src={current.url}
           alt={current.alt}
@@ -372,6 +386,7 @@ export function Lightbox({
             zoomTo(scale > MIN_SCALE ? MIN_SCALE : 2, e.clientX - rect.left - rect.width / 2, e.clientY - rect.top - rect.height / 2);
           }}
         />
+        )}
         {total > 1 && (
           <button
             type="button"

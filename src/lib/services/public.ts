@@ -297,8 +297,8 @@ export async function getSuspensions(seasonId: string) {
       const reg = s.person.registrations[0];
       return {
         id: s.id,
-        person: { id: s.person.id, name: `${s.person.lastName} ${s.person.firstName}` },
-        team: reg ? { id: reg.team.id, name: displayTeamName(reg.team.name) } : null,
+        person: { id: s.person.id, name: `${s.person.lastName} ${s.person.firstName}`, photoUrl: s.person.photoUrl },
+        team: reg ? { id: reg.team.id, name: displayTeamName(reg.team.name), logoUrl: reg.team.logoUrl ?? null } : null,
         league: { name: s.season.league.name },
         source: s.source,
         reason: s.reason,
@@ -316,9 +316,12 @@ export async function getSuspensions(seasonId: string) {
 // Судьи
 // ============================================================
 
+/** Судьи: фото персоны (Media) — для аватара в списке */
 export async function getReferees(seasonId?: string) {
   const referees = await refereeStats(seasonId);
-  return { referees };
+  const photos = await db.person.findMany({ where: { isReferee: true }, select: { id: true, photoUrl: true } });
+  const photoMap = new Map(photos.map((p) => [p.id, p.photoUrl]));
+  return { referees: referees.map((r) => ({ ...r, photoUrl: photoMap.get(r.personId) ?? null })) };
 }
 
 // ============================================================
@@ -332,8 +335,8 @@ export async function getSeasonTeams(seasonId: string) {
   });
 
   const teamsMap = new Map<string, {
-    id: string; name: string; clubName: string | null; city: string | null;
-    players: { id: string; name: string; position: string | null; number: number | null; endDate: string | null }[];
+    id: string; name: string; clubName: string | null; city: string | null; logoUrl: string | null;
+    players: { id: string; name: string; photoUrl: string | null; position: string | null; number: number | null; endDate: string | null }[];
   }>();
 
   for (const r of regs) {
@@ -343,12 +346,14 @@ export async function getSeasonTeams(seasonId: string) {
         name: displayTeamName(r.team.name),
         clubName: r.team.club?.name ?? null,
         city: r.team.club?.city ?? null,
+        logoUrl: r.team.logoUrl ?? r.team.club?.logoUrl ?? null,
         players: [],
       });
     }
     teamsMap.get(r.teamId)!.players.push({
       id: r.personId,
       name: `${r.person.lastName} ${r.person.firstName}`,
+      photoUrl: r.person.photoUrl,
       position: r.person.position,
       number: r.number,
       endDate: r.endDate?.toISOString() ?? null,

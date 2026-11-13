@@ -137,8 +137,8 @@ describe("«Важный матч» — только админ-пометка (
     newCoaches: new Map(),
   };
   const standings = [
-    { position: 1, teamId: "A", teamName: "A", clubName: null, games: 1, wins: 1, draws: 0, losses: 0, goalsFor: 3, goalsAgainst: 0, goalDiff: 3, points: 3, techLosses: 0, techWins: 0, fairPlay: 0, yellowCards: 0, redCards: 0, form: ["W"] },
-    { position: 2, teamId: "B", teamName: "B", clubName: null, games: 1, wins: 0, draws: 0, losses: 1, goalsFor: 0, goalsAgainst: 3, goalDiff: -3, points: 0, techLosses: 0, techWins: 0, fairPlay: 0, yellowCards: 0, redCards: 0, form: ["L"] },
+    { position: 1, teamId: "A", teamName: "A", clubName: null, logoUrl: null, games: 1, wins: 1, draws: 0, losses: 0, goalsFor: 3, goalsAgainst: 0, goalDiff: 3, points: 3, techLosses: 0, techWins: 0, fairPlay: 0, yellowCards: 0, redCards: 0, form: ["W"] },
+    { position: 2, teamId: "B", teamName: "B", clubName: null, logoUrl: null, games: 1, wins: 0, draws: 0, losses: 1, goalsFor: 0, goalsAgainst: 3, goalDiff: -3, points: 0, techLosses: 0, techWins: 0, fairPlay: 0, yellowCards: 0, redCards: 0, form: ["L"] },
   ];
 
   test("топ-соединение 1-е против 2-го БЕЗ пометки — НЕ важный (авто-логика удалена)", () => {

@@ -22,8 +22,8 @@ interface TeamDetail {
   };
   seasons: {
     season: { id: string; name: string; league: { id: string; name: string; format: string } };
-    players: { id: string; name: string; position: string | null; number: number | null; endDate: string | null }[];
-    coaches: { id: string; name: string; endDate: string | null; startDate: string }[];
+    players: { id: string; name: string; photoUrl?: string | null; position: string | null; number: number | null; endDate: string | null }[];
+    coaches: { id: string; name: string; photoUrl?: string | null; endDate: string | null; startDate: string }[];
   }[];
   standings: {
     season: { id: string; name: string; league: { id: string; name: string; format: string } };
@@ -105,7 +105,7 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
               <Crest name={team.name} id={team.id} logoUrl={team.logoUrl} size="lg" />
             </button>
           ) : (
-            <Crest name={team.name} id={team.id} size="lg" className="rounded-lg ring-1 ring-white/10" />
+            <Crest name={team.name} id={team.id} size="lg" className="rounded-lg" />
           )}
           <div className="min-w-[180px] flex-1">
             <h1 className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[22px] font-bold leading-tight text-ink">
@@ -190,7 +190,7 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
                         title={isNew ? "Возглавил команду недавно (до 30 дней)" : "Действующий тренер"}
                       >
                         <UserCog className="h-4 w-4 shrink-0 text-amber-300" />
-                        <Avatar name={c.name} id={c.id} size="xs" />
+                        <Avatar name={c.name} id={c.id} photoUrl={c.photoUrl} size="xs" />
                         <span className="min-w-0 flex-1 break-words text-[13px] font-semibold text-ink">{c.name}</span>
                         <span className="shrink-0 text-[11px] text-ink3">тренерский штаб</span>
                         {isNew && (
@@ -275,7 +275,7 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
                   <span className="w-14 shrink-0 tabular text-xs text-ink3">
                     {time.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Moscow" })}
                   </span>
-                  <Crest name={rival.name} id={rival.id} size="xs" />
+                  <Crest name={rival.name} id={rival.id} logoUrl={rival.logoUrl} size="xs" />
                   <span className="min-w-0 flex-1 break-words text-ink2">
                     <span className="text-ink3">{isHome ? "дома vs" : "в гостях у"}</span> {rival.name}
                   </span>
@@ -326,14 +326,14 @@ export default function TeamPage({ teamId, version = 0, initial }: { teamId: str
 
 /** Строка игрока состава (FS-паттерн, директива): номер в боксе 24px
  *  серым · аватар · имя 13px (переносится, НЕ усекается) · «отзаявлен». */
-function PlayerRow({ p }: { p: { id: string; name: string; number: number | null; endDate: string | null } }) {
+function PlayerRow({ p }: { p: { id: string; name: string; photoUrl?: string | null; number: number | null; endDate: string | null } }) {
   return (
     <button
       onClick={() => navigate(`/player/${p.id}`)}
       className="flex w-full items-center gap-2.5 rounded-md px-1 py-1.5 text-left hover:bg-shover"
     >
       <span className="w-6 shrink-0 text-center tabular text-xs text-ink3">{p.number ?? "—"}</span>
-      <Avatar name={p.name} id={p.id} size="xs" />
+      <Avatar name={p.name} id={p.id} photoUrl={p.photoUrl} size="xs" />
       <span className="min-w-0 flex-1 break-words text-[13px] text-ink2">{p.name}</span>
       {p.endDate && <span className="shrink-0 text-[11px] text-amber-400">отзаявлен</span>}
     </button>

@@ -1,21 +1,19 @@
 "use client";
 
-// Визуальные примитивы SCORESBOX: гербы команд и аватары персон генерируются
-// детерминированно из id (без картинок) — стабильная узнаваемость в светлом и тёмном.
+// Визуальные примитивы SCORESBOX: гербы команд и аватары персон.
+// Загруженная картинка (Media) — как есть; без неё — ДЕЛИКАТНАЯ заглушка
+// (фидбек 2026-11-13: «вместо дефолтных букв надо что-то более приятное
+// и менее отвлекающее»): спокойный монохромный ромб с контуром мяча
+// (команды) / маленький силуэт человека (персоны). Никаких цветных
+// градиентов и инициалов — списки читаются как текст, акцент — на фото.
 
 import { cn } from "@/lib/utils";
 import { ChevronRight, User } from "lucide-react";
 import { FORMAT_LABELS } from "@/lib/labels";
 import type { BannerDTO } from "./types";
 
-/** Детерминированный hue из строки (id) */
-export function hashHue(seed: string): number {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) % 360;
-  return h;
-}
-
-/** Инициалы: первые буквы до 2 слов */
+/** Инициалы: первые буквы до 2 слов — для микро-подписей (правая колонка,
+ *  шапка админки), НЕ для заглушек аватаров */
 export function initials(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return "?";
@@ -23,7 +21,28 @@ export function initials(name: string): string {
   return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-/** Герб команды: загруженная эмблема (logoUrl из медиатеки) или квадрат с инициалами */
+/** Контур футбольного мяча — заглушка герба команды (пассивная, серая) */
+function CrestPlaceholder({ className }: { className?: string }) {  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={cn("h-[58%] w-[58%]", className)}>
+      <circle cx="12" cy="12" r="8.4" stroke="currentColor" strokeWidth="1.4" />
+      <path d="M12 8.9 15.1 11.15 13.92 14.8 10.08 14.8 8.9 11.15Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M12 8.9V4.9M15.1 11.15 18.9 9.9M13.92 14.8 16.3 18.1M10.08 14.8 7.7 18.1M8.9 11.15 5.1 9.9" stroke="currentColor" strokeWidth="1" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Силуэт человека — заглушка аватара персоны (пассивная, серая) */
+function AvatarPlaceholder({ className }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden className={cn("h-[60%] w-[60%]", className)}>
+      <circle cx="12" cy="8.4" r="3.4" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M5.5 19.2c.9-3.4 3.5-5.2 6.5-5.2s5.6 1.8 6.5 5.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** Герб команды: загруженная эмблема (logoUrl из медиатеки) или тихий
+ *  ромб с контуром мяча (детерминированный цвет убран — отвлекал) */
 export function Crest({ name, id, size = "md", logoUrl, className }: { name: string; id: string; size?: "xxs" | "xs" | "sm" | "md" | "lg" | "xl"; logoUrl?: string | null; className?: string }) {
   const dims = { xxs: "h-5 w-5 text-[10px] rounded", xs: "h-6 w-6 text-xs rounded-md", sm: "h-8 w-8 text-xs rounded-lg", md: "h-10 w-10 text-xs rounded-xl", lg: "h-14 w-14 text-base rounded-xl", xl: "h-16 w-16 text-lg rounded-2xl" }[size];
   if (logoUrl) {
@@ -32,19 +51,20 @@ export function Crest({ name, id, size = "md", logoUrl, className }: { name: str
       <img src={logoUrl} alt={`${name} — эмблема`} className={cn("shrink-0 border border-sline bg-s1 object-cover", dims, className)} />
     );
   }
-  const h = hashHue(id);
+  void id;
   return (
     <span
       aria-hidden
-      className={cn("flex shrink-0 select-none items-center justify-center font-bold tracking-tight text-white", dims, className)}
-      style={{ background: `linear-gradient(135deg, hsl(${h} 48% 34%), hsl(${(h + 40) % 360} 55% 22%))`, boxShadow: "inset 0 -2px 6px rgba(0,0,0,0.25)" }}
+      className={cn("flex shrink-0 select-none items-center justify-center text-ink3/60", dims, className)}
+      style={{ background: "hsl(222 14% 16%)" }}
     >
-      {initials(name)}
+      <CrestPlaceholder />
     </span>
   );
 }
 
-/** Аватар персоны: загруженное фото (photoUrl) или круг с инициалами */
+/** Аватар персоны: загруженное фото (photoUrl) или тихий круг
+ *  с силуэтом человека */
 export function Avatar({ name, id, size = "md", photoUrl, className }: { name: string; id: string; size?: "xs" | "sm" | "md" | "lg" | "xl"; photoUrl?: string | null; className?: string }) {
   const dims = { xs: "h-6 w-6 text-xs", sm: "h-8 w-8 text-xs", md: "h-10 w-10 text-xs", lg: "h-12 w-12 text-sm", xl: "h-14 w-14 text-base" }[size];
   if (photoUrl) {
@@ -53,14 +73,14 @@ export function Avatar({ name, id, size = "md", photoUrl, className }: { name: s
       <img src={photoUrl} alt={`${name} — фото`} className={cn("shrink-0 border border-sline bg-s1 object-cover rounded-full", dims, className)} />
     );
   }
-  const h = hashHue(id);
+  void id;
   return (
     <span
       aria-hidden
-      className={cn("flex shrink-0 select-none items-center justify-center rounded-full font-bold text-white", dims, className)}
-      style={{ background: `hsl(${h} 32% 42%)` }}
+      className={cn("flex shrink-0 select-none items-center justify-center rounded-full text-ink3/60", dims, className)}
+      style={{ background: "hsl(222 14% 16%)" }}
     >
-      {initials(name)}
+      <AvatarPlaceholder />
     </span>
   );
 }

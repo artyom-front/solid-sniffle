@@ -14,6 +14,9 @@ const CSP = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
+  // видео-медиатека (v1.0.56): mp4/webm хранятся там же в БД и
+  // раздаются с того же origin (/api/media/<id>)
+  "media-src 'self' blob:",
   "connect-src 'self' wss: ws:",
   "object-src 'none'",
   "base-uri 'self'",

@@ -1,8 +1,9 @@
 "use client";
 
-// Виджет загрузки фото/файла в медиатеку (/api/admin/media).
+// Виджет загрузки фото/файла/видео в медиатеку (/api/admin/media).
 // Используется в формах персон, команд, клубов, стадионов, баннеров и протоколов.
 // value = "/api/media/<id>" | "" — совместимо с полями logoUrl/photoUrl/imageUrl.
+// v1.0.56: accept="video/*" — mp4/webm (моменты матча); превью — <video>.
 
 import { useRef, useState } from "react";
 import { Loader2, UploadCloud, X } from "lucide-react";
@@ -57,13 +58,23 @@ export function MediaUpload({ value, onChange, label = "Фото", hint, accept 
   };
 
   const isImage = value.startsWith("/api/media/") && (accept === "image/*" || value.match(/\.(webp|png|jpe?g)/i));
+  // видео-медиа: превью и подпись «видео» (фидбек 2026-11-13)
+  const isVideo = accept.includes("video") && value.startsWith("/api/media/");
 
   return (
     <div className={cn("space-y-1.5", className)}>
       <div className="flex items-center gap-3">
         {value ? (
           <div className="relative shrink-0">
-            {isImage ? (
+            {isVideo ? (
+              <video
+                src={value}
+                muted
+                playsInline
+                preload="metadata"
+                className={cn("h-16 w-16 border border-zinc-200 bg-black object-cover", round ? "rounded-full" : "rounded-lg")}
+              />
+            ) : isImage ? (
                
               <img
                 src={value}

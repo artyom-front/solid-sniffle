@@ -240,11 +240,12 @@ export async function getMatchDetail(id: string) {
       protocolFileName: match.protocolFileName,
       regulationScore: league.walkoverScore,
       // city: населённый пункт команды (герой карточки: подпись под названием
-      // вместо «хозяева/гости»); у команды без города — город клуба
-      homeTeam: { id: match.homeTeam.id, name: displayTeamName(match.homeTeam.name), clubName: match.homeTeam.club?.name ?? null, city: match.homeTeam.city ?? match.homeTeam.club?.city ?? null },
-      awayTeam: { id: match.awayTeam.id, name: displayTeamName(match.awayTeam.name), clubName: match.awayTeam.club?.name ?? null, city: match.awayTeam.city ?? match.awayTeam.club?.city ?? null },
+      // вместо «хозяева/гости»); у команды без города — город клуба;
+      // logoUrl: эмблема команды, при отсутствии — логотип клуба
+      homeTeam: { id: match.homeTeam.id, name: displayTeamName(match.homeTeam.name), clubName: match.homeTeam.club?.name ?? null, city: match.homeTeam.city ?? match.homeTeam.club?.city ?? null, logoUrl: match.homeTeam.logoUrl ?? match.homeTeam.club?.logoUrl ?? null },
+      awayTeam: { id: match.awayTeam.id, name: displayTeamName(match.awayTeam.name), clubName: match.awayTeam.club?.name ?? null, city: match.awayTeam.city ?? match.awayTeam.club?.city ?? null, logoUrl: match.awayTeam.logoUrl ?? match.awayTeam.club?.logoUrl ?? null },
       stadium: match.stadium ? { id: match.stadium.id, name: match.stadium.name, city: match.stadium.city } : null,
-      referee: match.referee ? { id: match.referee.id, name: `${match.referee.lastName} ${match.referee.firstName} ${match.referee.middleName ?? ""}`.trim() } : null,
+      referee: match.referee ? { id: match.referee.id, name: `${match.referee.lastName} ${match.referee.firstName} ${match.referee.middleName ?? ""}`.trim(), photoUrl: match.referee.photoUrl } : null,
       season: match.stage ? { id: match.stage.season.id, name: match.stage.season.name } : null,
       league: { id: league.id, name: league.name, walkoverScore: league.walkoverScore, yellowCardLimit: league.yellowCardLimit, format: league.format },
       events: match.events.map((e) => ({
@@ -264,7 +265,7 @@ export async function getMatchDetail(id: string) {
       lineups: match.lineups.map((l) => ({
         id: l.id,
         teamId: l.teamId,
-        person: { id: l.person.id, name: `${l.person.lastName} ${l.person.firstName}`, position: l.person.position },
+        person: { id: l.person.id, name: `${l.person.lastName} ${l.person.firstName}`, position: l.person.position, photoUrl: l.person.photoUrl },
         isStarter: l.isStarter,
         isCaptain: l.isCaptain,
         number: l.number,
@@ -291,8 +292,8 @@ export async function getMatchDetail(id: string) {
         kickoff: m.kickoff.toISOString(),
         status: m.status,
         walkoverType: m.walkoverType,
-        homeTeam: { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name) },
-        awayTeam: { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name) },
+        homeTeam: { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), logoUrl: m.homeTeam.logoUrl ?? null },
+        awayTeam: { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), logoUrl: m.awayTeam.logoUrl ?? null },
         homeScore: m.homeScore,
         awayScore: m.awayScore,
         regulationScore: m.stage?.season.league.walkoverScore ?? 3,
@@ -321,7 +322,7 @@ export async function getTeamProfile(id: string) {
     orderBy: { startDate: "desc" },
   });
 
-  const seasonsMap = new Map<string, { season: { id: string; name: string; league: { id: string; name: string; format: string } }; players: { id: string; name: string; position: string | null; number: number | null; endDate: string | null }[]; coaches: { id: string; name: string; endDate: string | null; startDate: string }[] }>();
+  const seasonsMap = new Map<string, { season: { id: string; name: string; league: { id: string; name: string; format: string } }; players: { id: string; name: string; photoUrl: string | null; position: string | null; number: number | null; endDate: string | null }[]; coaches: { id: string; name: string; photoUrl: string | null; endDate: string | null; startDate: string }[] }>();
   for (const r of regs) {
     if (!seasonsMap.has(r.seasonId)) {
       seasonsMap.set(r.seasonId, {
@@ -331,8 +332,8 @@ export async function getTeamProfile(id: string) {
     }
     const entry = seasonsMap.get(r.seasonId)!;
     const name = `${r.person.lastName} ${r.person.firstName}`;
-    if (r.role === "COACH") entry.coaches.push({ id: r.personId, name, endDate: r.endDate?.toISOString() ?? null, startDate: r.startDate.toISOString() });
-    else entry.players.push({ id: r.personId, name, position: r.person.position, number: r.number, endDate: r.endDate?.toISOString() ?? null });
+    if (r.role === "COACH") entry.coaches.push({ id: r.personId, name, photoUrl: r.person.photoUrl, endDate: r.endDate?.toISOString() ?? null, startDate: r.startDate.toISOString() });
+    else entry.players.push({ id: r.personId, name, photoUrl: r.person.photoUrl, position: r.person.position, number: r.number, endDate: r.endDate?.toISOString() ?? null });
   }
   for (const entry of seasonsMap.values()) {
     entry.players.sort((a, b) => (a.number ?? 99) - (b.number ?? 99) || a.name.localeCompare(b.name, "ru"));
@@ -394,7 +395,7 @@ export async function getTeamProfile(id: string) {
 
   return {
     team: {
-      id: team.id, name: displayTeamName(team.name), city: team.city, logoUrl: team.logoUrl,
+      id: team.id, name: displayTeamName(team.name), city: team.city, logoUrl: team.logoUrl ?? team.club?.logoUrl ?? null,
       club: team.club ? { id: team.club.id, name: team.club.name, city: team.club.city, description: team.club.description } : null,
     },
     seasons: [...seasonsMap.values()],
@@ -426,7 +427,7 @@ export async function getPlayerProfile(id: string) {
   const seasonIds = [...new Set(person.registrations.map((r) => r.seasonId))];
   const statsBySeason: {
     season: { id: string; name: string; league: string };
-    team: { id: string; name: string };
+    team: { id: string; name: string; logoUrl: string | null };
     stats: PlayerStatRow;
   }[] = [];
   for (const seasonId of seasonIds) {
@@ -434,7 +435,7 @@ export async function getPlayerProfile(id: string) {
     const season = person.registrations.find((r) => r.seasonId === seasonId)!.season;
     if (stats) statsBySeason.push({
       season: { id: season.id, name: season.name, league: season.league.name },
-      team: { id: stats.teamId, name: stats.teamName },
+      team: { id: stats.teamId, name: stats.teamName, logoUrl: stats.logoUrl ?? null },
       stats,
     });
   }
@@ -571,7 +572,7 @@ export async function getPlayerProfile(id: string) {
         totals: coachTotals,
       },
       registrations: person.registrations.map((r) => ({
-        team: { id: r.team.id, name: displayTeamName(r.team.name), clubName: r.team.club?.name ?? null },
+        team: { id: r.team.id, name: displayTeamName(r.team.name), clubName: r.team.club?.name ?? null, logoUrl: r.team.logoUrl ?? r.team.club?.logoUrl ?? null },
         season: { id: r.season.id, name: r.season.name, league: r.season.league.name },
         startDate: r.startDate.toISOString(),
         endDate: r.endDate?.toISOString() ?? null,

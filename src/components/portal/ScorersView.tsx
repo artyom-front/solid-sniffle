@@ -36,7 +36,7 @@ export default function ScorersView({ seasonId, version, onOpenPlayer }: { seaso
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full tabular text-xs font-bold ${i < 3 ? "bg-gold text-goldink" : "bg-s2 text-ink2"}`}>
         {i + 1}
       </span>
-      <Avatar name={p.name} id={p.personId} size="sm" />
+      <Avatar name={p.name} id={p.personId} photoUrl={p.photoUrl} size="sm" />
       <div className="min-w-0 flex-1">
         <p className="flex items-center gap-2 break-words text-sm font-medium text-ink">
           {p.name} <PositionBadge position={p.position} />
@@ -96,7 +96,7 @@ export default function ScorersView({ seasonId, version, onOpenPlayer }: { seaso
             {data.goalkeepers.map((p, i) => (
               <button key={p.personId} onClick={() => onOpenPlayer(p.personId)} className="flex w-full items-center gap-3 border-b border-sline/40 px-4 py-2.5 text-left transition-colors hover:bg-s2/50">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-s2 tabular text-xs font-bold text-ink2">{i + 1}</span>
-                <Avatar name={p.name} id={p.personId} size="sm" />
+                <Avatar name={p.name} id={p.personId} photoUrl={p.photoUrl} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-sm font-medium text-ink">{p.name}</p>
                   <p className="break-words text-xs text-ink3">{p.teamName}</p>
@@ -117,7 +117,7 @@ export default function ScorersView({ seasonId, version, onOpenPlayer }: { seaso
             {data.fairPlay.map((p, i) => (
               <button key={p.personId} onClick={() => onOpenPlayer(p.personId)} className="flex w-full items-center gap-3 border-b border-sline/40 px-4 py-2.5 text-left transition-colors hover:bg-s2/50">
                 <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-s2 tabular text-xs font-bold text-ink2">{i + 1}</span>
-                <Avatar name={p.name} id={p.personId} size="sm" />
+                <Avatar name={p.name} id={p.personId} photoUrl={p.photoUrl} size="sm" />
                 <div className="min-w-0 flex-1">
                   <p className="break-words text-sm font-medium text-ink">{p.name}</p>
                   <p className="break-words text-xs text-ink3">{p.teamName}</p>

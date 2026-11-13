@@ -13,6 +13,8 @@ export interface PlayerStatRow {
   position: string | null;
   /** фото персоны (Media) — для аватаров в виджетах статистики */
   photoUrl: string | null;
+  /** эмблема команды (Media) — для гербов рядом с командой в профиле игрока */
+  logoUrl: string | null;
   games: number;
   goals: number;
   penalties: number;
@@ -41,11 +43,11 @@ export async function seasonPlayerStats(seasonId: string): Promise<PlayerStatRow
   });
 
   const map = new Map<string, PlayerStatRow>();
-  const get = (personId: string, teamId: string, name: string, teamName: string, position: string | null, photoUrl: string | null = null) => {
+  const get = (personId: string, teamId: string, name: string, teamName: string, position: string | null, photoUrl: string | null = null, logoUrl: string | null = null) => {
     let row = map.get(personId);
     if (!row) {
       row = {
-        personId, name, teamName, teamId, position, photoUrl,
+        personId, name, teamName, teamId, position, photoUrl, logoUrl,
         games: 0, goals: 0, penalties: 0, ownGoals: 0, assists: 0,
         yellowCards: 0, redCards: 0, cleanSheets: 0,
       };
@@ -65,12 +67,12 @@ export async function seasonPlayerStats(seasonId: string): Promise<PlayerStatRow
   // участие (по заявкам на матчи и по событиям)
   const playedMatches = new Map<string, Set<string>>();
   for (const l of lineups) {
-    get(l.personId, l.teamId, `${l.person.lastName} ${l.person.firstName}`, displayTeamName(l.team.name), l.person.position, l.person.photoUrl);
+    get(l.personId, l.teamId, `${l.person.lastName} ${l.person.firstName}`, displayTeamName(l.team.name), l.person.position, l.person.photoUrl, l.team.logoUrl);
     if (!playedMatches.has(l.personId)) playedMatches.set(l.personId, new Set());
     playedMatches.get(l.personId)!.add(l.matchId);
   }
   for (const e of events) {
-    get(e.personId, e.teamId, `${e.person.lastName} ${e.person.firstName}`, displayTeamName(e.team.name), e.person.position, e.person.photoUrl);
+    get(e.personId, e.teamId, `${e.person.lastName} ${e.person.firstName}`, displayTeamName(e.team.name), e.person.position, e.person.photoUrl, e.team.logoUrl);
     if (!playedMatches.has(e.personId)) playedMatches.set(e.personId, new Set());
     playedMatches.get(e.personId)!.add(e.matchId);
     // в статы-карту ассистент попадает только если это настоящий ассист

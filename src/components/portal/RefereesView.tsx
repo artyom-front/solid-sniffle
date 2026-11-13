@@ -35,7 +35,7 @@ export default function RefereesView({ seasonId, version }: { seasonId: string; 
             className="rounded-xl border border-sline bg-s1 p-5 text-left transition-all hover:border-gold/50"
           >
             <div className="flex items-center gap-3">
-              <Avatar name={r.name} id={r.personId} size="lg" />
+              <Avatar name={r.name} id={r.personId} photoUrl={r.photoUrl} size="lg" />
               <div className="min-w-0">
                 <p className="truncate font-semibold leading-tight text-ink">{r.name}</p>
                 <p className="text-xs text-ink3">{r.matches} обслуженных матчей · профиль →</p>

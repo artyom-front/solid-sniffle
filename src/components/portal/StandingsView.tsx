@@ -87,7 +87,7 @@ export default function StandingsView({ seasonId, version }: { seasonId: string;
                 </td>
                 <td className="px-1.5 max-sm:px-1.5">
                   <span className="flex items-center gap-2">
-                    <Crest name={r.teamName} id={r.teamId} size="xs" />
+                    <Crest name={r.teamName} id={r.teamId} logoUrl={r.logoUrl} size="xs" />
                     <span className="min-w-0">
                       <span className="block break-words font-medium text-ink">{r.teamName}</span>
                       {r.clubName && <span className="block text-[11px] text-ink3">{r.clubName}</span>}

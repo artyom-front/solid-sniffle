@@ -49,7 +49,7 @@ interface EventRow {
 export interface LineupRow {
   id: string;
   teamId: string;
-  person: { id: string; name: string; position: string | null };
+  person: { id: string; name: string; position: string | null; photoUrl?: string | null };
   isStarter: boolean;
   /** v1.0.34: капитан команды в этом матче — пометка «(К)» в составе */
   isCaptain?: boolean;
@@ -361,7 +361,7 @@ function StaffCell({ l, side, className }: { l: LineupRow; side: "left" | "right
         <span className="shrink-0 text-[10px] font-medium min-[480px]:text-[11px] text-ink3">{role}</span>
       )}
       <span className="min-w-0 truncate text-[12px] min-[480px]:text-[13px] text-ink2">{l.person.name}</span>
-      <Avatar name={l.person.name} id={l.person.id} size="xs" />
+      <Avatar name={l.person.name} id={l.person.id} photoUrl={l.person.photoUrl} size="xs" />
       {side === "left" && (
         <span className="shrink-0 text-[10px] font-medium min-[480px]:text-[11px] text-ink3">{role}</span>
       )}

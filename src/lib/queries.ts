@@ -56,8 +56,8 @@ export function toMatchDTO(m: Awaited<ReturnType<typeof loadSeasonData>>["matche
   homeScore: number | null; awayScore: number | null; note: string | null;
   isFriendly: boolean; protocolUrl: string | null; protocolFileName: string | null;
   isImportant?: boolean;
-  homeTeam: { id: string; name: string; club?: { name: string | null } | null; logoUrl?: string | null };
-  awayTeam: { id: string; name: string; club?: { name: string | null } | null; logoUrl?: string | null };
+  homeTeam: { id: string; name: string; club?: { name: string | null; logoUrl?: string | null } | null; logoUrl?: string | null };
+  awayTeam: { id: string; name: string; club?: { name: string | null; logoUrl?: string | null } | null; logoUrl?: string | null };
   stadium: { id: string; name: string; city: string | null } | null;
   referee: { id: string; lastName: string; firstName: string } | null;
 }, regulationScore: number): MatchDTO {
@@ -74,9 +74,12 @@ export function toMatchDTO(m: Awaited<ReturnType<typeof loadSeasonData>>["matche
     isImportant: (m as { isImportant?: boolean }).isImportant ?? false,
     protocolUrl: m.protocolUrl,
     protocolFileName: m.protocolFileName,
-    // фидбек 2026-10-01: публичное имя команды — без суффикса «№N»
-    homeTeam: { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), clubName: (m.homeTeam as { club?: { name: string | null } | null }).club?.name ?? null, logoUrl: (m.homeTeam as { logoUrl?: string | null }).logoUrl ?? null },
-    awayTeam: { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), clubName: (m.awayTeam as { club?: { name: string | null } | null }).club?.name ?? null, logoUrl: (m.awayTeam as { logoUrl?: string | null }).logoUrl ?? null },
+    // фидбек 2026-10-01: публичное имя команды — без суффикса «№N»;
+    // эмблема: своя у команды, иначе — логотип клуба (фидбек 2026-11-13:
+    // «фото клубов не видны на клиенте» — у большинства команд своей
+    // эмблемы нет, грузили лого именно клубу)
+    homeTeam: { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), clubName: (m.homeTeam as { club?: { name: string | null } | null }).club?.name ?? null, logoUrl: (m.homeTeam as { logoUrl?: string | null }).logoUrl ?? (m.homeTeam as { club?: { logoUrl?: string | null } | null }).club?.logoUrl ?? null },
+    awayTeam: { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), clubName: (m.awayTeam as { club?: { name: string | null } | null }).club?.name ?? null, logoUrl: (m.awayTeam as { logoUrl?: string | null }).logoUrl ?? (m.awayTeam as { club?: { logoUrl?: string | null } | null }).club?.logoUrl ?? null },
     stadium: m.stadium ? { id: m.stadium.id, name: m.stadium.name, city: m.stadium.city } : null,
     referee: m.referee ? { id: m.referee.id, name: `${m.referee.lastName} ${m.referee.firstName}` } : null,
     regulationScore,
@@ -99,18 +102,18 @@ export async function seasonStandings(seasonId: string): Promise<StandingRow[]> 
   // (все команды с 0 игр). Матчевые команды добавляются объединением —
   // чтобы таблица не теряла команды, заявленные позже/без заявок.
   // Семантика «активной заявки» — как в генераторе расписания.
-  const teams = new Map<string, { id: string; name: string; clubName: string | null }>();
+  const teams = new Map<string, { id: string; name: string; clubName: string | null; logoUrl: string | null }>();
   const regs = await db.registration.findMany({
     where: { seasonId, OR: [{ endDate: null }, { endDate: { gte: new Date() } }] },
     include: { team: { include: { club: true } } },
   });
   for (const r of regs) {
     if (teams.has(r.teamId)) continue;
-    teams.set(r.teamId, { id: r.team.id, name: displayTeamName(r.team.name), clubName: r.team.club?.name ?? null });
+    teams.set(r.teamId, { id: r.team.id, name: displayTeamName(r.team.name), clubName: r.team.club?.name ?? null, logoUrl: r.team.logoUrl ?? r.team.club?.logoUrl ?? null });
   }
   for (const m of matches) {
-    if (!teams.has(m.homeTeamId)) teams.set(m.homeTeamId, { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), clubName: m.homeTeam.club?.name ?? null });
-    if (!teams.has(m.awayTeamId)) teams.set(m.awayTeamId, { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), clubName: m.awayTeam.club?.name ?? null });
+    if (!teams.has(m.homeTeamId)) teams.set(m.homeTeamId, { id: m.homeTeam.id, name: displayTeamName(m.homeTeam.name), clubName: m.homeTeam.club?.name ?? null, logoUrl: m.homeTeam.logoUrl ?? m.homeTeam.club?.logoUrl ?? null });
+    if (!teams.has(m.awayTeamId)) teams.set(m.awayTeamId, { id: m.awayTeam.id, name: displayTeamName(m.awayTeam.name), clubName: m.awayTeam.club?.name ?? null, logoUrl: m.awayTeam.logoUrl ?? m.awayTeam.club?.logoUrl ?? null });
   }
   const stage = stages[0];
   return computeStandings(

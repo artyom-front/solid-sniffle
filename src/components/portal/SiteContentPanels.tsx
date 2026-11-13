@@ -60,7 +60,9 @@ function StatBlockPreview({ form }: { form: StatForm }) {
   return (
     <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
       <div className="relative mx-auto h-[120px] w-full max-w-[300px] bg-zinc-900">
-        {form.imageUrl ? (
+        {form.imageUrl && /\.(mp4|webm)(\?|$)/i.test(form.imageUrl) ? (
+          <video src={form.imageUrl} muted loop playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />
+        ) : form.imageUrl ? (
           <img
             src={form.imageUrl}
             alt=""
@@ -138,7 +140,9 @@ export function StatBlocksPanel({ bump, onReload, version = 0 }: CrudProps) {
       <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
         {blocks.map((b) => (
           <div key={b.id} className="flex flex-wrap items-center gap-2 border-b border-zinc-50 px-4 py-2.5 last:border-b-0">
-            {b.imageUrl ? (
+            {b.imageUrl && /\.(mp4|webm)(\?|$)/i.test(b.imageUrl) ? (
+              <video src={b.imageUrl} muted playsInline preload="metadata" className="h-8 w-14 rounded border border-zinc-200 bg-black object-cover" />
+            ) : b.imageUrl ? (
               <img src={b.imageUrl} alt="" className="h-8 w-14 rounded border border-zinc-200 object-cover" />
             ) : (
               <BarChart3 className="h-4 w-4 shrink-0 text-amber-400" />
@@ -193,8 +197,9 @@ export function StatBlocksPanel({ bump, onReload, version = 0 }: CrudProps) {
                     value={form.imageUrl}
                     onChange={(url) => setForm((f) => (f ? { ...f, imageUrl: url } : f))}
                     onUploadingChange={setUploading}
-                    label="Фото/картинка (опционально)"
-                    hint="Фото игрока, лого клуба — загрузите с диска. Без картинки карточка останется текстовой ТОГО ЖЕ размера"
+                    accept="image/*,video/mp4,video/webm"
+                    label="Фото/картинка или видео (опционально)"
+                    hint="Фото игрока, лого клуба или видео-момент (MP4/WebM до 64 МБ). Без медиа карточка останется текстовой ТОГО ЖЕ размера"
                   />
                 </div>
                 {form.imageUrl && (

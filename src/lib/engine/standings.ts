@@ -17,6 +17,9 @@ export interface StandingsTeam {
   id: string;
   name: string;
   clubName?: string | null;
+  /// Эмблема команды (Media): таблица и превью матча показывают герб,
+  /// а не заглушку. Фолбэк — logoUrl клуба (у команды своей эмблемы нет).
+  logoUrl?: string | null;
 }
 
 export interface StandingRow {
@@ -24,6 +27,8 @@ export interface StandingRow {
   teamId: string;
   teamName: string;
   clubName: string | null;
+  /// Эмблема команды/клуба (Media) — прокидывается в UI таблицы
+  logoUrl: string | null;
   games: number;
   wins: number;
   draws: number;
@@ -74,6 +79,7 @@ export function computeStandings(
       teamId: t.id,
       teamName: t.name,
       clubName: t.clubName ?? null,
+      logoUrl: t.logoUrl ?? null,
       games: 0, wins: 0, draws: 0, losses: 0,
       goalsFor: 0, goalsAgainst: 0, goalDiff: 0,
       points: 0, techLosses: 0, techWins: 0,

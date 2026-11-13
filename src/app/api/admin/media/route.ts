@@ -1,6 +1,7 @@
 // Загрузка медиафайлов (фото персон/клубов/команд/стадионов, файлы протоколов).
-// POST multipart/form-data: file=<image|pdf>
-// Изображения автоматически уменьшаются до 1920px и конвертируются в WebP (sharp).
+// POST multipart/form-data: file=<image|pdf|video>
+// Изображения автоматически уменьшаются до 1920px и конвертируются в WebP (sharp);
+// видео (mp4/webm, фидбек 2026-11-13 «проверь добавление видео») кладётся как есть.
 // Возвращает { url: "/api/media/<id>", ... } — URL кладётся в поле сущности.
 // DELETE ?url=/api/media/<id> — удаление.
 // v1.0.42 (аудит 2026-10-05): DELETE — только SUPER_ADMIN. У Media нет модели
@@ -14,9 +15,12 @@ import { errorResponse } from "@/lib/http";
 import { audit } from "@/lib/engine/lifecycle";
 
 const IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/avif"];
-const FILE_TYPES = [...IMAGE_TYPES, "application/pdf"];
+const VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
+const FILE_TYPES = [...IMAGE_TYPES, "application/pdf", ...VIDEO_TYPES];
 const MAX_IMAGE_BYTES = 8 * 1024 * 1024; // 8 МБ до обработки
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 МБ для PDF
+/** видео — до 64 МБ: минуты игры в 480p/720p укладываются; БД bytea */
+const MAX_VIDEO_BYTES = 64 * 1024 * 1024;
 /** v1.0.46: 1920px по длинной стороне — фоновые баннеры (BACKGROUND)
  *  рекомендуются 1920×1080 и раньше сжимались до 1200 (мыло на больших
  *  экранах). WebP q82 держит размер в сотни КБ — БД не распухает. */
@@ -31,10 +35,15 @@ export async function POST(req: Request) {
 
     const mime = file.type || "application/octet-stream";
     const isImage = IMAGE_TYPES.includes(mime);
+    const isVideo = VIDEO_TYPES.includes(mime);
     if (!FILE_TYPES.includes(mime)) {
-      throw new HttpError(422, `Тип не поддерживается: ${mime}. Разрешены JPG, PNG, WebP, AVIF, PDF`);
+      throw new HttpError(422, `Тип не поддерживается: ${mime}. Разрешены JPG, PNG, WebP, AVIF, PDF, MP4, WebM`);
     }
-    const limit = isImage ? MAX_IMAGE_BYTES : MAX_FILE_BYTES;
+    // видео с телефона часто идёт без MIME (octet-stream) — верим по расширению
+    const videoExtMatch = /\.(mp4|webm|mov)$/i.exec(file.name ?? "");
+    const treatAsVideoByExt = !!videoExtMatch;
+    const treatAsVideo = isVideo || (mime === "application/octet-stream" && treatAsVideoByExt);
+    const limit = isImage ? MAX_IMAGE_BYTES : treatAsVideo ? MAX_VIDEO_BYTES : MAX_FILE_BYTES;
     if (file.size > limit) throw new HttpError(422, `Файл больше ${Math.round(limit / 1024 / 1024)} МБ`);
 
     let data: Buffer;
@@ -52,6 +61,11 @@ export async function POST(req: Request) {
         .toBuffer();
       outMime = "image/webp";
       filename = filename ? filename.replace(/\.[^.]+$/, "") + ".webp" : null;
+    } else if (treatAsVideo) {
+      // видео не пережимаем на лету (ffmpeg в рантайме - тяжело):
+      // кладём как есть, сервер отдаёт с поддержкой Range-запросов
+      outMime = isVideo ? mime : videoExtMatch?.[0].toLowerCase() === ".webm" ? "video/webm" : "video/mp4";
+      data = Buffer.from(await file.arrayBuffer());
     } else {
       data = Buffer.from(await file.arrayBuffer());
     }

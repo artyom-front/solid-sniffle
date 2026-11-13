@@ -69,9 +69,9 @@ interface TeamInsightDTO {
 interface MatchDetail {
   match: MatchDTO & {
     events: EventRow[];
-    lineups: { id: string; teamId: string; person: { id: string; name: string; position: string | null }; isStarter: boolean; number: number | null; regRole: string }[];
+    lineups: { id: string; teamId: string; person: { id: string; name: string; position: string | null; photoUrl?: string | null }; isStarter: boolean; number: number | null; regRole: string }[];
     season: { id: string; name: string } | null;
-    referee: { id: string; name: string } | null;
+    referee: { id: string; name: string; photoUrl?: string | null } | null;
     officials: { id: string; role: string; person: { id: string; name: string } }[];
     league: { id: string; name: string; walkoverScore: number; yellowCardLimit: number; format: string };
   };
@@ -79,7 +79,7 @@ interface MatchDetail {
   h2h: {
     list: {
       id: string; kickoff: string; status: string; walkoverType: string | null;
-      homeTeam: { id: string; name: string }; awayTeam: { id: string; name: string };
+      homeTeam: { id: string; name: string; logoUrl?: string | null }; awayTeam: { id: string; name: string; logoUrl?: string | null };
       homeScore: number | null; awayScore: number | null; regulationScore: number;
       season: { name: string; league: string };
     }[];
@@ -314,7 +314,7 @@ function HeroTeamRow({
   const color = status === "LIVE" ? "text-live" : digit == null ? "text-ink3" : win ? "text-gold" : "text-ink2";
   return (
     <button className="flex w-full items-center gap-2.5 text-left" onClick={() => navigate(`/team/${teamId}`)}>
-      <Crest name={name} id={teamId} logoUrl={logoUrl} size="xs" className="ring-1 ring-white/10" />
+      <Crest name={name} id={teamId} logoUrl={logoUrl} size="xs" />
       <span className={cn("min-w-0 flex-1 break-words text-sm font-semibold", status === "LIVE" || win ? "text-ink" : "text-ink2")}>{name}</span>
       {digit != null && <span className={cn("shrink-0 tabular text-base font-bold", color)}>{digit}</span>}
     </button>
@@ -486,7 +486,7 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
             <div key={team.id} className="flex flex-col overflow-hidden rounded-lg border border-sline/50">
               {/* строка команды: лого + имя + форма справа */}
               <button className="flex w-full items-center gap-2.5 px-3 pt-3 text-left hover:text-gold" onClick={() => navigate(`/team/${team.id}`)}>
-                <Crest name={team.name} id={team.id} size="xs" />
+                <Crest name={team.name} id={team.id} logoUrl={team.logoUrl} size="xs" />
                 <span className="min-w-0 flex-1 break-words text-sm font-semibold text-ink">{team.name}</span>
                 {row?.form && <FormBadges form={row.form.slice(-5)} size="sm" />}
               </button>
@@ -681,7 +681,7 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
               return (
                 <div key={team.id} className="rounded-lg border border-sline/50 p-3">
                   <button className="mb-2 flex w-full items-center gap-2 rounded-md px-1 py-1 text-left hover:text-gold" onClick={() => navigate(`/team/${team.id}`)}>
-                    <Crest name={team.name} id={team.id} size="sm" />
+                    <Crest name={team.name} id={team.id} logoUrl={m.homeTeam.id === team.id ? m.homeTeam.logoUrl : m.awayTeam.logoUrl} size="sm" />
                     <span className="text-[13px] font-bold text-ink2">{team.name}</span>
                   </button>
                   {entries.length === 0 ? null : (
@@ -720,7 +720,7 @@ function PreviewTab({ m, standings, h2h, missing, signals, insights }: {
  *  только информация, кто обслуживал матч. */
 function RefereeBlock({ m, referee }: {
   m: NonNullable<MatchDetail["match"]>;
-  referee: { id: string; name: string } | null;
+  referee: { id: string; name: string; photoUrl?: string | null } | null;
 }) {
   const ROLE_NAMES: Record<string, string> = {
     REFEREE: "Главный судья",
@@ -744,7 +744,7 @@ function RefereeBlock({ m, referee }: {
             onClick={() => navigate(`/player/${referee.id}`)}
             className="flex w-full items-center gap-3 rounded-lg border border-sline/50 bg-s2/30 p-2.5 text-left transition-colors hover:border-gold/40"
           >
-            <Avatar name={referee.name} id={referee.id} size="md" />
+            <Avatar name={referee.name} id={referee.id} photoUrl={referee.photoUrl} size="md" />
             <span className="min-w-0 flex-1">
               <span className="block break-words font-bold text-ink">{referee.name}</span>
               <span className="text-xs text-ink3">главный судья матча · профиль →</span>
@@ -852,7 +852,7 @@ function StandingsTab({ standings, homeId, awayId }: { standings: StandingRowDTO
                 </td>
                 <td className="px-1.5 max-sm:px-1.5">
                   <span className="flex items-center gap-2">
-                    <Crest name={r.teamName} id={r.teamId} size="xs" />
+                    <Crest name={r.teamName} id={r.teamId} logoUrl={r.logoUrl} size="xs" />
                     <span className={cn("min-w-0 break-words", hl ? "font-bold text-ink" : "font-medium text-ink2")}>{r.teamName}</span>
                   </span>
                   {/* мобайл: В-Н-П, мячи и форма — второй строкой под командой */}

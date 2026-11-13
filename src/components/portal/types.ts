@@ -83,6 +83,8 @@ export interface StandingRowDTO {
   teamId: string;
   teamName: string;
   clubName: string | null;
+  /** эмблема команды/клуба (Media) — герб в таблице вместо заглушки */
+  logoUrl: string | null;
   games: number; wins: number; draws: number; losses: number;
   goalsFor: number; goalsAgainst: number; goalDiff: number;
   points: number; techLosses: number; techWins: number;
@@ -147,6 +149,8 @@ export interface PlayerStatRowDTO {
   position: string | null;
   /** фото игрока (Media) — для аватара в топе; слот всегда 24×24 (анти-CLS) */
   photoUrl?: string | null;
+  /** эмблема команды игрока (Media) — в профиле рядом с командой */
+  logoUrl?: string | null;
   games: number;
   goals: number;
   penalties: number;
@@ -166,8 +170,8 @@ export interface ScorersDTO {
 
 export interface SuspensionDTO {
   id: string;
-  person: { id: string; name: string };
-  team: { id: string; name: string } | null;
+  person: { id: string; name: string; photoUrl?: string | null };
+  team: { id: string; name: string; logoUrl?: string | null } | null;
   league: { name: string };
   source: string;
   reason: string | null;
@@ -183,12 +187,16 @@ export interface TeamDTO {
   name: string;
   clubName: string | null;
   city: string | null;
-  players: { id: string; name: string; position: string | null; number: number | null; endDate: string | null }[];
+  /** эмблема команды/клуба (Media) — герб в списке команд вместо заглушки */
+  logoUrl?: string | null;
+  players: { id: string; name: string; photoUrl?: string | null; position: string | null; number: number | null; endDate: string | null }[];
 }
 
 export interface RefereeStatDTO {
   personId: string;
   name: string;
+  /** фото судьи (Media) — аватар в списке судей */
+  photoUrl?: string | null;
   matches: number;
   yellowAvg: number;
   redAvg: number;

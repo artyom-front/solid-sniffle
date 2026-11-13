@@ -33,7 +33,7 @@ export default function DisciplineView({ seasonId, version, onOpenPlayer }: { se
         {active.length === 0 && <p className="py-8 text-center text-sm text-ink3">Все игроки в строю</p>}
         {active.map((s) => (
           <button key={s.id} onClick={() => onOpenPlayer(s.person.id)} className="flex w-full flex-wrap items-center gap-3 border-b border-sline/40 px-4 py-3 text-left transition-colors last:border-b-0 hover:bg-s2/50">
-            <Avatar name={s.person.name} id={s.person.id} size="sm" />
+            <Avatar name={s.person.name} id={s.person.id} photoUrl={s.person.photoUrl} size="sm" />
             <div className="min-w-[180px] flex-1">
               <p className="text-sm font-semibold text-ink">{s.person.name}</p>
               <p className="text-xs text-ink3">{s.team?.name ?? "—"}</p>

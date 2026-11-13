@@ -32,7 +32,7 @@ export default function TeamsView({ seasonId, version }: { seasonId: string; ver
             className="group rounded-xl border border-sline bg-s1 p-4 text-left transition-all hover:border-gold/50 hover:bg-s2/40"
           >
             <div className="flex items-start justify-between">
-              <Crest name={t.name} id={t.id} size="md" />
+              <Crest name={t.name} id={t.id} logoUrl={t.logoUrl} size="md" />
               <ArrowUpRight className="h-4 w-4 text-ink3 transition-colors group-hover:text-gold" />
             </div>
             <p className="mt-3 font-semibold text-ink group-hover:text-gold">{t.name}</p>

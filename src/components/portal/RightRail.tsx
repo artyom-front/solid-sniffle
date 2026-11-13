@@ -155,7 +155,18 @@ function FeaturedMatchSkeleton() {
 function StatCard({ sb }: { sb: StatBlockDTO }) {
   const content = (
     <>
-      {sb.imageUrl && (
+      {sb.imageUrl && /\.(mp4|webm)(\?|$)/i.test(sb.imageUrl) ? (
+        // видео-момент (фидбек 2026-11-13): карточка с видео играет
+        // прямо в колонке; постер — первый кадр, градиент с подписью сверху
+        <video
+          src={sb.imageUrl}
+          muted
+          loop
+          playsInline
+          preload="metadata"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+      ) : sb.imageUrl ? (
         <img
           src={sb.imageUrl}
           alt=""
@@ -165,7 +176,7 @@ function StatCard({ sb }: { sb: StatBlockDTO }) {
             objectPosition: sb.imagePos ?? "center",
           }}
         />
-      )}
+      ) : null}
       <div
         className={cn(
           "absolute inset-0 flex flex-col gap-1 overflow-hidden p-3",

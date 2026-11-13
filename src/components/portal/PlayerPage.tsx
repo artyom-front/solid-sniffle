@@ -45,7 +45,7 @@ interface PlayerDetail {
       totals: { matches: number; wins: number; draws: number; losses: number; goalsFor: number; goalsAgainst: number };
     };
     registrations: {
-      team: { id: string; name: string; clubName: string | null };
+      team: { id: string; name: string; clubName: string | null; logoUrl?: string | null };
       season: { id: string; name: string; league: string };
       startDate: string;
       endDate: string | null;
@@ -58,7 +58,7 @@ interface PlayerDetail {
     }[];
     statsBySeason: {
       season: { id: string; name: string; league: string };
-      team: { id: string; name: string };
+      team: { id: string; name: string; logoUrl?: string | null };
       stats: {
         games: number; goals: number; penalties: number; ownGoals: number; assists: number;
         yellowCards: number; redCards: number; cleanSheets: number;
@@ -182,7 +182,7 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
               <Avatar name={p.name} id={p.id} photoUrl={p.photoUrl} size="xl" />
             </button>
           ) : (
-            <Avatar name={p.name} id={p.id} size="xl" className="ring-2 ring-gold/30" />
+            <Avatar name={p.name} id={p.id} size="xl" />
           )}
           <div className="min-w-0 flex-1">
             <h1 className="flex flex-wrap items-center gap-2 text-[22px] font-bold leading-tight text-ink">
@@ -216,7 +216,7 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
               )}
               {currentReg && (
                 <button className="flex items-center gap-1.5 text-ink2 hover:text-gold" onClick={() => navigate(`/team/${currentReg.team.id}`)}>
-                  <Crest name={currentReg.team.name} id={currentReg.team.id} size="xs" />
+                  <Crest name={currentReg.team.name} id={currentReg.team.id} logoUrl={currentReg.team.logoUrl} size="xs" />
                   {currentReg.team.name}
                   {currentNumber && <span className="font-mono text-ink3">№{currentNumber}</span>
                   }
@@ -398,7 +398,7 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
                 <div className="space-y-1.5">
                   {p.registrations.map((r, i) => (
                     <div key={i} className="flex flex-wrap items-center gap-2.5 rounded-xl border border-sline/50 bg-s2/30 px-3 py-2.5 text-sm">
-                      <Crest name={r.team.name} id={r.team.id} size="sm" />
+                      <Crest name={r.team.name} id={r.team.id} logoUrl={r.team.logoUrl} size="sm" />
                       <button className="min-w-0 font-semibold text-ink hover:text-gold" onClick={() => navigate(`/team/${r.team.id}`)}>
                         {r.team.name}
                       </button>
@@ -472,7 +472,7 @@ export default function PlayerPage({ personId, initial }: { personId: string; in
                               И | Г | П цифрами вправо (tabular-nums) */}
                           <div className="flex items-center gap-2">
                             <button className="flex min-w-0 items-center gap-2 text-left" onClick={() => navigate(`/team/${s.team.id}`)}>
-                              <Crest name={s.team.name} id={s.team.id} size="xxs" />
+                              <Crest name={s.team.name} id={s.team.id} logoUrl={s.team.logoUrl} size="xxs" />
                               <span className="min-w-0 break-words text-[13px] font-medium text-ink hover:text-gold">{s.team.name}</span>
                             </button>
                             <span className="ml-auto flex shrink-0 items-center gap-2.5 tabular text-[13px] text-ink3 min-[480px]:hidden">
