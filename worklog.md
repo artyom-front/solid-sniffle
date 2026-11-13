@@ -3381,3 +3381,78 @@ Stage Summary:
   редакторе протокола; судьи/помощники матча — вкладка «Бригада».
 - Прочее: tsc теперь 0 (попутно закрыт долг TS2451), сервер
   превью перезапущен (subshell-nohup, survives tool-calls).
+
+---
+Task ID: 60
+Agent: main (Super Z)
+Task: feedback56 → v1.0.56 — медиа на клиенте: фото игроков/клубов
+«не видны», проверка видео/фото/прочих медиа, тихие заглушки
+
+Work Log:
+- ФИДБЕК (2026-11-13): (1) «фото игроков и клубов добавлены в
+  админке, а на клиенте не появились»; (2) «проверь добавление
+  видео, фото и прочих медиа»; (3) «вместо дефолтных букв — что-то
+  более приятное и менее отвлекающее».
+- ДИАГНОСТИКА (1): медиа-цепочка аплоад→БД работала, РВАЛОСЬ на
+  отдаче клиенту. Три дыры: (а) у Entity team.logoUrl фолбэка на
+  club.logoUrl НЕ БЫЛО — эмблемы грузили КЛУБАМ, а матч-DTO/профили
+  читали только team.logoUrl → NULL у большинства; (б) карточка
+  матча (getMatchDetail) вообще не отдавала logoUrl/homeTeam/awayTeam;
+  (в) таблица/H2H/составы/судьи/списки — без полей медиа.
+- ФИКС (1) — «конвейер медиа» сквозной:
+  * queries.toMatchDTO + seasonStandings: logoUrl = team.logoUrl ??
+    club.logoUrl (фолбэк клуба) — лента, календарь, таблица, H2H;
+  * profiles.getMatchDetail: home/away logoUrl + referee.photoUrl +
+    lineups[].person.photoUrl (составы с фото);
+  * getTeamProfile/getPlayerProfile: лого (фолбэк клуба), фото
+    игроков в составе/тренерах; stats.ts PlayerStatRow + logoUrl;
+  * public.getSeasonTeams (вкладка «Команды») + getSuspensions
+    (фото/герб) + getReferees (фото судьи).
+- ФИКС (3): Crest/Avatar — НОВАЯ заглушка вместо цветных инициалов
+  (feedback56 №3): тёмный спокойный ромб с контуром мяча (команды)
+  и круг с силуэтом человека (персоны), text-ink3/60 — списки
+  читаются как текст; hashHue-градиенты и крикливые буквы убраны;
+  кольца ring-gold вокруг заглушек сняты. initials() сохранён для
+  микро-подписей RightRail/админки.
+- ФИКС (2) — ВИДЕО-МЕДИА (новое):
+  * /api/admin/media: mp4/webm/mov до 64 МБ (+ octet-stream по
+    расширению), видео не пережимается;
+  * /api/media/[id]: Range-запросы → 206 + Content-Range +
+    Accept-Ranges (иначе <video> не перематывает, iOS не играет);
+  * CSP: media-src 'self' blob:;
+  * MediaUpload: accept="video/*" → превью <video>; Lightbox:
+    video?:true → <video controls> вместо <img> (зум к видео не
+    применяется); StatCard (правая колонка) и превью админки:
+    .mp4/.webm → <video muted loop>;
+  * стат-карточки: аплоад принимает image/*,video/mp4,video/webm.
+- ТИПЫ: StandingRow(+logoUrl), MatchDetail-типы, TeamDTO/Suspension/
+  RefereeStat/PlayerStatRow — синхронизированы с DTO.
+- ТЕСТЫ: bun 157/157 (моки standings +logoUrl: null), tsc 0,
+  eslint 0. НОВАЯ миграция НЕ требовалась (Media-модель без изменений).
+- СМОК (scripts/smoke56.ts, 14/14): логин → аплоад PNG → Media →
+  фото ПЕРСОНЫ + лого КЛУБА → публичный API отдаёт photoUrl/logoUrl
+  (фолбэк клуба на профиле команды!) → SSR /player и /team содержат
+  <img src="/api/media/…"> → standings-DTO с logoUrl → аплоад mp4 →
+  Range 206 bytes 0-9/23 → полный GET video/mp4 → стат-карточка с
+  видео (создана/удалена). После смока тест-медиа вычищены из БД.
+- ДЕЛИВЕРИ: работа в рабочем дереве (dev-сервер перезапущен не
+  был — Turbopack подхватил изменения на лету, /api/health → 1.0.56
+  после рестарта конфига).
+
+Stage Summary:
+- v1.0.56: медиа теперь СКВОЗНОЕ — фото игроков, эмблемы команд и
+  КЛУБОВ (фолбэк), стадионы, баннеры, видео-моменты (mp4/webm)
+  видны во всех списках/профилях/карточке матча; заглушки — тихие
+  монохромные иконки вместо инициалов.
+- Юзеру: лого клуба теперь показывается у ВСЕХ его команд без
+  эмблем; видео грузится в стат-карточки (правая колонка) и любые
+  MediaUpload-поля с accept video/*.
+- ДЕЛИВЕРИ: коммиты b658d7d (feat) → 5706b32 (release 1.0.56) →
+  make-archives → delivery (панель public/download: бандл
+  2026-11-13-feedback56 + README поставки + ADMIN-GUIDE) → docs
+  (этот worklog). Бандл ~13.2 МБ.
+- ВЕРИФИКАЦИЯ БАНДЛА (клон в чистое репо): orphan-коммит a20c69e
+  «SCORESBOX 2026-11-13 feedback56: v1.0.56 — медиа на клиенте…»,
+  package.json 1.0.56, сигнатурные файлы на месте (smoke56.ts,
+  media/[id]/route.ts с Range, visuals.tsx тихие заглушки,
+  standings.ts +logoUrl, next.config.ts media-src) — OK.
