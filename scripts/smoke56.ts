@@ -131,14 +131,25 @@ async function main() {
     check("SSR /team → <img> с лого", teamHtml.includes(media.url as string));
   }
 
-  // таблица сезона: лого клуба у команды (клиент тянет /api/public/standings)
+  // таблица сезона: лого клуба у команды (клиент тянет /api/public/standings).
+  // v1.0.57: проверяем СЕЗОН, В КОТОРОМ ИГРАЕТ команда клуба (через overview),
+  // а не первый попавшийся — в демо-данных команды первого клуба может не
+  // быть в первой лиге, и проверка падала из-за данных, а не кода.
   const seasons = await j(await fetch(`${BASE}/api/public/overview`));
-  const league = seasons.leagues?.[0];
-  if (league?.seasons?.[0]) {
-    const st = await j(await fetch(`${BASE}/api/public/standings?seasonId=${league.seasons[0].id}`));
-    const withLogo = (st.standings ?? []).some((r: any) => r.logoUrl);
-    check("таблица сезона → logoUrl в DTO (вкладка «Таблица»)", withLogo);
+  let standingsOk = false;
+  let standingsNote = "сезон с командой клуба не найден";
+  outer: for (const league of seasons.leagues ?? []) {
+    for (const s of league.seasons ?? []) {
+      const st = await j(await fetch(`${BASE}/api/public/standings?seasonId=${s.id}`));
+      const row = (st.standings ?? []).find((r: any) => r.teamId === teamOfClub);
+      if (row) {
+        standingsOk = row.logoUrl === media.url;
+        standingsNote = `${league.name} · ${s.name} → ${row.teamName} logoUrl=${row.logoUrl ?? "null"}`;
+        break outer;
+      }
+    }
   }
+  check("таблица сезона → logoUrl в DTO (вкладка «Таблица»)", standingsOk, standingsNote);
 
   // ---------- 6. видео: аплоад mp4 + Range ----------
   // крошечный валидный mp4 (ftyp-бокс, 1 байт payload) — сервер не
