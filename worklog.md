@@ -3456,3 +3456,57 @@ Stage Summary:
   package.json 1.0.56, сигнатурные файлы на месте (smoke56.ts,
   media/[id]/route.ts с Range, visuals.tsx тихие заглушки,
   standings.ts +logoUrl, next.config.ts media-src) — OK.
+
+---
+
+## Task ID: 61 — cifix57: упавший пуш feedback56 (tsc + bun audit) → v1.0.57
+
+**Дата:** 2026-11-18 · **Статус:** ГОТОВО (поставка feedback57)
+
+- СИМПТОМ (от юзера): пуш feedback56 упал в CI с двумя ошибками —
+  (1) scripts/smoke56.ts(82,31) TS2322: Buffer<ArrayBufferLike> не
+  assignable к BlobPart (SharedArrayBuffer ≠ ArrayBuffer);
+  (2) bun audit: 2 CRITICAL в next >=16.0.0 <=16.4.0
+  (GHSA-2464 RCE в image optimization при SVG, GHSA-673q RCE в
+  use cache с typed arrays).
+- ДИАГНОЗ (1): @types/node 25 типизирует Buffer как
+  Buffer<ArrayBufferLike>; BlobPart требует ArrayBufferView<ArrayBuffer>.
+  Фикс: new Blob([new Uint8Array(png)]) — семантика та же.
+- ДИАГНОЗ (2): next запинен на 16.3.8 — внутри уязвимого диапазона.
+  Фикс: next 16.4.6 + eslint-config-next 16.4.6 (последний патч
+  16.4.x), прочие deps не тронуты.
+- ПОСЛЕДСТВИЕ апгрейда: eslint-config-next 16.4.6 поднял react-hooks
+  v6 — 8 НОВЫХ ошибок линта в старом коде. Все починены правкой
+  кода, правила НЕ отключались:
+  * MatchDayView: StatusCell объявлен ВНУТРИ MatchRow → вынесен на
+    уровень модуля (react-hooks/static-components; компонент,
+    созданный в рендере, сбрасывает состояние);
+  * use-mobile: setState-в-эффекте → useSyncExternalStore(matchMedia)
+    — подписка на внешний источник без промежуточного стейта;
+  * hooks.ts useFetch: полный рефактор — стейт ставится только из
+    async-колбэков, loading/error — ПРОИЗВОДНЫЕ от ключа url#version;
+    ПОБОЧНО устранена гонка «ответ отменённого запроса затирает
+    данные нового URL» (cancelled-флаг в эффекте);
+  * SearchDialog: дебаунс без setState-в-эффекте — результаты
+    привязаны к запросу (resultsFor), «сброс» вычисляется при рендере;
+  * make-deploy-guide.js → .mjs (no-require-imports в ESM-окружении),
+    гайд регенерирован и переложен в public/download.
+- smoke56 (упрочнение): проверка «таблица сезона → logoUrl» искала
+  logoUrl в ПЕРВОМ сезоне overview — в демо-данных команда клуба не
+  играла в первой лиге, проверка падала по ДАННЫМ, не по коду.
+  Фикс: перебор сезонов до того, где играет команда клуба. 14/14.
+- ВЕРИФИКАЦИЯ локально (= CI quality job): tsc 0, eslint 0,
+  bun test 157/157, bun audit 0 critical, check-deps ок.
+  Прод-сборка Next 16.4.6 (standalone) поднята на :3000,
+  /api/health → 1.0.57; smoke56 14/14 НА СБОРКЕ; браузер: строки
+  матчей (LIVE-минуты), поиск «/» с новым дебаунсом, вьюпорт 375px;
+  тест-медиа смока вычищены (cleanup-smoke56.mjs).
+- МИГРАЦИЙ БД НЕТ — схема не менялась.
+
+Stage Summary:
+- v1.0.57: пайплайн снова зелёный — TS-фикс smoke56, next 16.4.6
+  (2 critical RCE закрыты), код по стандартам react-hooks v6.
+- Юзеру: применить бандл как обычно (fetch → reset → push), деплой
+  без миграций; после деплоя /api/health → "version":"1.0.57".
+- ДЕЛИВЕРИ: 231725a (fix ci) → 22fe018 (smoke) → release commit →
+  make-archives (бандл 2026-11-18-feedback57 + README) → docs.
