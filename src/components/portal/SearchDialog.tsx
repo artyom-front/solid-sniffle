@@ -27,7 +27,7 @@ export default function SearchDialog() {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
   const [results, setResults] = useState<SearchResults>(EMPTY);
-  const [loading, setLoading] = useState(false);
+  const [resultsFor, setResultsFor] = useState("");
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Открытие из любого места + хоткей «/»
@@ -49,30 +49,31 @@ export default function SearchDialog() {
     };
   }, [open]);
 
-  // Дебаунс-запрос
+  // Дебаунс-запрос. Результаты хранятся вместе с запросом, для которого
+  // они получены (resultsFor): показываем их, только пока пользователь
+  // не начал новый ввод — стейт «сбрасывается» вычислением при рендере,
+  // без setState-в-эффекте (react-hooks/set-state-in-effect).
+  const trimmed = q.trim();
+  const stale = trimmed.length < 2 || resultsFor !== trimmed;
+  const total = !stale ? results.leagues.length + results.teams.length + results.players.length + results.stadiums.length : 0;
+
   useEffect(() => {
-    if (timer.current) clearTimeout(timer.current);
-    if (q.trim().length < 2) {
-      setResults(EMPTY);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
+    if (trimmed.length < 2) return;
     timer.current = setTimeout(async () => {
       try {
-        const r = await fetch(`/api/public/search?q=${encodeURIComponent(q.trim())}`);
+        const r = await fetch(`/api/public/search?q=${encodeURIComponent(trimmed)}`);
         const j = (await r.json()) as SearchResults;
         setResults(j);
+        setResultsFor(trimmed);
       } catch {
         setResults(EMPTY);
-      } finally {
-        setLoading(false);
+        setResultsFor(trimmed);
       }
     }, 250);
     return () => {
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [q]);
+  }, [trimmed]);
 
   const go = (path: string) => {
     setOpen(false);
@@ -80,7 +81,7 @@ export default function SearchDialog() {
     navigate(path);
   };
 
-  const total = results.leagues.length + results.teams.length + results.players.length + results.stadiums.length;
+  const loading = trimmed.length >= 2 && stale;
 
   return (
     <Dialog open={open} onOpenChange={setOpen}>
@@ -97,8 +98,8 @@ export default function SearchDialog() {
             <kbd className="hidden shrink-0 rounded border border-sline bg-s2 px-1.5 py-0.5 text-xs font-semibold text-ink3 sm:block">Esc</kbd>
           </div>
           <CommandList className="max-h-[55vh] scrollbar-s21">
-            {q.trim().length >= 2 && !loading && total === 0 && <CommandEmpty>Ничего не найдено</CommandEmpty>}
-            {q.trim().length < 2 && (
+            {trimmed.length >= 2 && !loading && total === 0 && <CommandEmpty>Ничего не найдено</CommandEmpty>}
+            {trimmed.length < 2 && (
               <p className="py-8 text-center text-sm text-ink3">Введите минимум 2 символа — поиск по лигам, командам, игрокам, судьям и стадионам</p>
             )}
             {results.leagues.length > 0 && (

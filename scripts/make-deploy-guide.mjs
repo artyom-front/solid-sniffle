@@ -2,13 +2,13 @@
 // Обложка: R1 (Pure Paragraph Left) + палитра DS-1 (Deep Sea) —
 // общий технический отчёт. Схема: 3 секции (обложка / TOC-римские /
 // тело-арабские), TOC + refresh hint + PageBreak, пост-обработка футеров.
-const {
+import {
   Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell,
   PageBreak, Header, Footer, PageNumber, NumberFormat, SectionType,
   AlignmentType, HeadingLevel, WidthType, BorderStyle, ShadingType,
   TableLayoutType, TableOfContents,
-} = require("docx");
-const fs = require("fs");
+} from "docx";
+import fs from "node:fs";
 
 // ---------- палитра DS-1 (Deep Sea) ----------
 const P = {

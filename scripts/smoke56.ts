@@ -79,7 +79,7 @@ async function main() {
 
   // ---------- 2. аплоад фото ----------
   const fd = new FormData();
-  fd.append("file", new Blob([png], { type: "image/png" }), "smoke.png");
+  fd.append("file", new Blob([new Uint8Array(png)], { type: "image/png" }), "smoke.png");
   const up = await fetch(`${BASE}/api/admin/media`, { method: "POST", headers: auth, body: fd });
   const media = await j(up);
   check("аплоад фото → Media", up.ok && media.url?.startsWith("/api/media/"), media.url ?? media.error ?? "");

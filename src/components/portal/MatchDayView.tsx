@@ -281,6 +281,43 @@ export default function MatchDayView({ format, version, initialDay, infeedBanner
   );
 }
 
+/** ячейка времени/статуса (Р-13): 12px/400 серый; LIVE — красный
+ *  с пульсирующей точкой; на мобиле под ним «с 17:36» 11px.
+ *  Объявлена на уровне модуля: компонент внутри рендера пересоздавался
+ *  бы при каждом рендере строки (react-hooks/static-components). */
+function StatusCell({ m, timeStr, liveMinute, mobile }: {
+  m: LivescoreMatchDTO;
+  timeStr: string;
+  liveMinute: string;
+  mobile?: boolean;
+}) {
+  const s = m.signals;
+  const important = s?.important;
+  const dateStr = new Date(m.kickoff).toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Moscow" });
+  return (
+    <span className="flex min-w-0 flex-col items-center">
+      {m.status === "LIVE" ? (
+        <>
+          <span className="flex items-center gap-1.5">
+            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-live live-dot" />
+            <span className="tabular text-xs text-live">{liveMinute}</span>
+          </span>
+          {mobile && <span className="tabular text-[11px] leading-tight text-ink3">с {timeStr}</span>}
+        </>
+      ) : m.status === "POSTPONED" ? (
+        <span className="text-center text-[10px] font-semibold uppercase tracking-wide text-ink3">перенесён</span>
+      ) : m.status === "SCHEDULED" ? (
+        <>
+          {important?.flag && <Trophy className="h-3 w-3 shrink-0 text-gold" aria-label="Важный матч" />}
+          <span className="tabular text-xs text-ink2">{timeStr}</span>
+        </>
+      ) : (
+        <span className="tabular text-xs text-ink3">{dateStr}</span>
+      )}
+    </span>
+  );
+}
+
 /** Строка матча (директива Р-13/Р-14):
  *
  *  МОБАЙЛ (<768px) — grid 48px | 1fr | 32px, padding 8px 12px,
@@ -303,7 +340,6 @@ function MatchRow({ m }: { m: LivescoreMatchDTO }) {
   const score = matchScore(m);
   const time = new Date(m.kickoff);
   const timeStr = time.toLocaleTimeString("ru-RU", { hour: "2-digit", minute: "2-digit", timeZone: "Europe/Moscow" });
-  const dateStr = time.toLocaleDateString("ru-RU", { day: "2-digit", month: "2-digit", timeZone: "Europe/Moscow" });
 
   const s = m.signals;
   const important = s?.important;
@@ -323,31 +359,6 @@ function MatchRow({ m }: { m: LivescoreMatchDTO }) {
       m.status === "LIVE" ? "text-ink" : win ? "text-ink" : "text-ink2"
     );
 
-  /** ячейка времени/статуса (Р-13): 12px/400 серый; LIVE — красный
-   *  с пульсирующей точкой; на мобиле под ним «с 17:36» 11px */
-  const StatusCell = ({ mobile }: { mobile?: boolean }) => (
-    <span className={cn("flex min-w-0 flex-col items-center", mobile ? "items-center" : "items-center")}>
-      {m.status === "LIVE" ? (
-        <>
-          <span className="flex items-center gap-1.5">
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-live live-dot" />
-            <span className="tabular text-xs text-live">{liveMinute}</span>
-          </span>
-          {mobile && <span className="tabular text-[11px] leading-tight text-ink3">с {timeStr}</span>}
-        </>
-      ) : m.status === "POSTPONED" ? (
-        <span className="text-center text-[10px] font-semibold uppercase tracking-wide text-ink3">перенесён</span>
-      ) : m.status === "SCHEDULED" ? (
-        <>
-          {important?.flag && <Trophy className="h-3 w-3 shrink-0 text-gold" aria-label="Важный матч" />}
-          <span className="tabular text-xs text-ink2">{timeStr}</span>
-        </>
-      ) : (
-        <span className="tabular text-xs text-ink3">{dateStr}</span>
-      )}
-    </span>
-  );
-
   return (
     <button
       data-match-row
@@ -364,7 +375,7 @@ function MatchRow({ m }: { m: LivescoreMatchDTO }) {
           по 18px + 16px паддинга = ровно 52 ---------- */}
       <div className="grid grid-cols-[48px_minmax(0,1fr)_32px] grid-rows-2 items-center gap-x-2 min-[768px]:hidden">
         <span className="row-span-2 self-center">
-          <StatusCell mobile />
+          <StatusCell m={m} timeStr={timeStr} liveMinute={liveMinute} mobile />
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
           <TeamSignals side={s?.home} />
@@ -385,7 +396,7 @@ function MatchRow({ m }: { m: LivescoreMatchDTO }) {
       {/* ---------- ДЕСКТОП (≥768px): одна строка, min-h 44px на кнопке
           (Р-14) ---------- */}
       <div className="hidden min-[768px]:grid min-[768px]:grid-cols-[44px_minmax(0,1fr)_auto_minmax(0,1fr)_24px] min-[768px]:items-center min-[768px]:gap-x-2">
-        <StatusCell />
+        <StatusCell m={m} timeStr={timeStr} liveMinute={liveMinute} />
         {/* хозяева: имя прижато к счёту (вправо), сигналы левее */}
         <span className="flex min-w-0 flex-row-reverse items-center gap-1.5">
           <span className={nameCls(!!score && score.home > score.away)}>{m.homeTeam.name}</span>
