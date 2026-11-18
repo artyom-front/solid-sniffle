@@ -1,0 +1,22 @@
+# CODEOWNERS: обязательные ревьюеры по зонам кода
+# Схема: путь → команда/пользователь
+
+# дефолт — техлид проекта
+*                       @ffchuvashia/tech-lead
+
+# доменная логика (дисквалификации, WO, merge) — только с ревью владельца домена
+/src/lib/engine/       @ffchuvashia/domain-owner
+/src/lib/services/     @ffchuvashia/domain-owner
+/prisma/schema.prisma  @ffchuvashia/domain-owner
+
+# безопасность (auth, 2FA, proxy) — обязательный аппрув
+/src/lib/auth.ts       @ffchuvashia/tech-lead @ffchuvashia/security
+/src/lib/totp.ts       @ffchuvashia/security
+/src/app/api/auth/     @ffchuvashia/security
+/src/proxy.ts          @ffchuvashia/security
+
+# CI/CD и деплой
+/.github/              @ffchuvashia/devops
+/scripts/deploy.sh     @ffchuvashia/devops
+/scripts/rollback.sh   @ffchuvashia/devops
+/Dockerfile            @ffchuvashia/devops
