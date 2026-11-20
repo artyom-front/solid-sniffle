@@ -3576,3 +3576,27 @@ Stage Summary:
   Google; Docker Hub 429 больше не ломает деплой.
 - Юзеру: применить бандл deploy59 как обычно (fetch → reset → push),
   деплой без миграций; после деплоя /api/health → "version":"1.0.59".
+
+## Task 63 — 2026-11-20 · v1.0.60 cifix60: deps-гейт снова зелёный
+
+Stage: ci fix (v1.0.60) · base: deploy59 (90fdca1)
+
+Инцидент v1.0.59: пуш упал в CI на гейте «Аудит deps» —
+`python3 scripts/check-deps.py` → `MISSING docx` → exit 1. Причина:
+при сборке deploy59 коммит `git add` случайно занёс в трек СТАРЫЕ
+копии генераторов гайда (`scripts/make-deploy-guide.mjs`,
+`scripts/patch-deploy-guide-footers.py`), которые feedback58 честно
+держал только в `tools/docs/` (вне зоны скана check-deps).
+Файлы вернулись в `scripts/` → импорт `docx` снова видим.
+
+Фикс: старые копии УДАЛЕНЫ из `scripts/` (канон — `tools/docs/`,
+как в v1.0.58); deploy.sh pull_resilient из v1.0.59 не тронут.
+
+Верификация: check-deps → «ок: все импортируемые пакеты объявлены»,
+exit 0; меняются только 2 удаления + версия package.json. МИГРАЦИЙ НЕТ.
+
+Stage Summary:
+- v1.0.60: чистые scripts/ — деплой-фикс v1.0.59 едет дальше.
+- Юзеру: применить бандл cifix60 как обычно (fetch → reset → push);
+  тег v1.0.59 можно удалить: `git tag -d v1.0.59 && git push origin :refs/tags/v1.0.59`,
+  затем ставить v1.0.60.
