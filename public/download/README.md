@@ -1,79 +1,70 @@
-# Поставка SCORESBOX — v1.0.59 «deploy59» (20.11.2026)
+# Поставка SCORESBOX — v1.0.60 «cifix60» (20.11.2026)
 
-**Что это:** фикс упавшего деплоя v1.0.58 — Docker Hub ответил
-«429 Too Many Requests» на образ `postgres:16-alpine`, и деплой
-останавливался на шаге предзагрузки образов. **МИГРАЦИЙ БД НЕТ** —
-меняется один файл `scripts/deploy.sh`.
+**Что это:** фикс упавшего пуша v1.0.59 — CI упал на гейте «Аудит deps»
+(`MISSING docx`). **МИГРАЦИЙ БД НЕТ**; деплой-фикс v1.0.59
+(pull_resilient, без Docker Hub) внутри и не тронут.
 
 ## Коротко: что случилось и что исправлено
 
-Деплой v1.0.58: CI зелёный, образ приложения в ghcr.io, но шаг
-«docker compose pull» на VPS упал: Docker Hub вернул **429 Too Many
-Requests** на `postgres:16-alpine`. Анонимный лимит pull с IP вашего
-сервера исчерпан (деплои v1.0.56–58 долбили Docker Hub). Плюс
-compose-пулл **атомарный**: postgres не скачался → и образ приложения
-из ghcr.io не скачался → деплой умер целиком.
+Пуш v1.0.59 упал там же, где feedback57: `scripts/make-deploy-guide.mjs`
+импортирует `docx`, которого нет в `package.json`. feedback58 решал это
+переносом генераторов гайда в `tools/docs/` (вне зоны скана check-deps),
+но при сборке deploy59 старые копии **случайно вернулись в трек** в
+`scripts/` — и гейт снова увидел импорт `docx`.
 
-**Фикс (секция 0.2 deploy.sh → `pull_resilient`):**
+**Фикс:** старые копии (`make-deploy-guide.mjs`,
+`patch-deploy-guide-footers.py`) удалены из `scripts/`; канон —
+`tools/docs/`, как в v1.0.58. Больше ничего не менялось: deploy.sh
+pull_resilient из v1.0.59 едет дальше, версия 1.0.60.
 
-1. **Локальный кэш:** образ уже на сервере (`docker image inspect`) —
-   пул не нужен вовсе. Postgres стоит на сервере с v1.0.55 → после
-   фикса деплой **вообще не ходит в Docker Hub**;
-2. до 4 попыток с паузой 20→40→80→160с; «no space left on device» —
-   чистка и повтор **без паузы** (логика диска v1.0.52 сохранена);
-3. фолбэк официальных образов Docker Hub (postgres) — зеркало Google
-   `mirror.gcr.io/library/<img>` + `docker tag` (зеркало не под
-   анонимным лимитом Docker Hub);
-4. образ приложения — ghcr.io (свой регистр, лимита нет).
+## Верификация (= шаги CI quality, локально на чистом клоне бандла)
 
-Важно: деплой-скрипт **копируется из репозитория на сервер при каждом
-запуске CI** (шаг scp в cd.yml) — поэтому фикс делается в репо, а не
-правкой на сервере: ручные правки на VPS затираются каждым деплоем.
-
-## Верификация
-
-- `bash -n scripts/deploy.sh` — синтаксис OK;
-- концы строк LF (без CRLF — иначе bash на сервере ломается);
-- меняется ТОЛЬКО `scripts/deploy.sh` (+ версия в package.json) —
-  код приложения не тронут, CI-гейты идут по unchanged-файлам v1.0.58;
-- чистый клон бандла: deploy.sh идентичен, версия 1.0.59, pull_resilient на месте.
+- `python3 scripts/check-deps.py` — «ок: все импортируемые пакеты
+  объявлены», exit 0 (тот самый гейт, что упал);
+- `bash -n scripts/deploy.sh` — синтаксис OK; концы строк LF;
+- `scripts/make-deploy-guide.mjs` в клоне ОТСУТСТВУЕТ (канон в
+  `tools/docs/`), deploy.sh идентичен версии v1.0.59;
+- меняются только 2 удаления + версия в package.json — код приложения
+  не тронут, остальные гейты CI идут по unchanged-файлам v1.0.58.
 
 ## Применить и задеплоить (PowerShell, папка вашего клона)
 
 ```bash
-git fetch "$HOME\Downloads\scoresbox-2026-11-20-deploy59.git-bundle" main
-git log --oneline -3 FETCH_HEAD   # «SCORESBOX 2026-11-20 deploy59: …»
+git fetch "$HOME\Downloads\scoresbox-2026-11-20-cifix60.git-bundle" main
+git log --oneline -3 FETCH_HEAD   # «SCORESBOX 2026-11-20 cifix60: …»
 git log FETCH_HEAD..main          # ПУСТО = терять нечего, безопасно
 git reset --hard FETCH_HEAD && git push --force origin main
-git tag v1.0.59 && git push origin v1.0.59
+git tag -d v1.0.59                # если уже ставили тег с deploy59
+git push origin :refs/tags/v1.0.59   # убрать упавший тег из GitHub (если был)
+git tag v1.0.60 && git push origin v1.0.60
 ```
 
 ⚠️ Перед `reset --hard`: если `git log FETCH_HEAD..main` НЕ пуст —
-спрячьте свои коммиты: `git branch backup/pre-v1059 main`, потом reset.
+спрячьте свои коммиты: `git branch backup/pre-v1060 main`, потом reset.
 
-⚠️ В бандле тег уже лежит рядом с main; если `git tag v1.0.59` скажет
-«already exists» — просто `git push origin v1.0.59`.
+⚠️ В бандле тег v1.0.60 уже лежит рядом с main; если `git tag v1.0.60`
+скажет «already exists» — просто `git push origin v1.0.60`.
 
 После деплоя: Actions → джоба deploy → в логе шага «Деплой через SSH»
 появится «Предзагрузка образов (pull_resilient)» и для postgres —
-«уже есть локально — пул не нужен». `/api/health` → `"version":"1.0.59"`.
+«уже есть локально — пул не нужен». `/api/health` → `"version":"1.0.60"`.
 Миграций в логе быть не должно.
 
 ## Что проверить на проде
 
 1. пайплайн GitHub Actions на этом пуше — зелёный ДО конца
-   (quality → integration → docker → deploy): в логе деплоя видно,
-   что шаг pull_resilient прошёл БЕЗ обращения к Docker Hub;
-2. `/api/health` → версия 1.0.59;
-3. лента матчей на главной работает как раньше (деплой не трогал UI);
-4. при следующем деплое postgres качаться не будет — «уже есть локально».
+   (quality → integration → docker → deploy): deps-гейт чист;
+2. `/api/health` → версия 1.0.60;
+3. в логе деплоя: pull_resilient прошёл БЕЗ обращения к Docker Hub
+   (postgres — «уже есть локально»);
+4. лента матчей на главной работает как раньше (код не трогали).
 
 ## Архив поставок (ссылки действуют всегда)
 
 | Версия | Бандл | Что внутри |
 |---|---|---|
-| **v1.0.59** (текущая) | `scoresbox-2026-11-20-deploy59.git-bundle` | фикс деплоя: pull_resilient — без Docker Hub (429), локальный кэш → ghcr → зеркало Google |
-| v1.0.58 | `scoresbox-2026-11-18-feedback58.git-bundle` | фикс CI: deps-гейт — генераторы гайдов в tools/docs/, devDep tailwindcss-animate |
+| **v1.0.60** (текущая) | `scoresbox-2026-11-20-cifix60.git-bundle` | фикс CI: deps-гейт — из scripts/ убраны старые копии генераторов гайда (docx); внутри деплой-фикс v1.0.59 pull_resilient |
+| v1.0.59 | `scoresbox-2026-11-20-deploy59.git-bundle` (снят с раздачи — упал в CI на deps-гейте; фикс = v1.0.60) | деплой-фикс: pull_resilient — без Docker Hub (429) |
 | v1.0.57 | `scoresbox-2026-11-18-feedback57.git-bundle` | (упал в CI на deps-гейте) фикс TS2322 smoke56, next 16.4.6, react-hooks v6 |
 | v1.0.56 | `scoresbox-2026-11-13-feedback56.git-bundle` | медиа-конвейер (фото/лого сквозь клиент, фолбэк клуба), видео mp4/WebM + Range, тихие заглушки |
 | v1.0.55 | `scoresbox-2026-10-09-feedback55.git-bundle` | штаб на матч, начальник команды, сквозная заявка, чистка подсказок |
@@ -88,7 +79,7 @@ git tag v1.0.59 && git push origin v1.0.59
 
 **Прямые ссылки (панель /download/):**
 
-- v1.0.59: https://preview-chat-d2608ef6-93f5-4d0d-bfb4-6435f0304186.space-z.ai/download/scoresbox-2026-11-20-deploy59.git-bundle
+- v1.0.60: https://preview-chat-d2608ef6-93f5-4d0d-bfb4-6435f0304186.space-z.ai/download/scoresbox-2026-11-20-cifix60.git-bundle
 - v1.0.58: https://preview-chat-d2608ef6-93f5-4d0d-bfb4-6435f0304186.space-z.ai/download/scoresbox-2026-11-18-feedback58.git-bundle
 - v1.0.57: https://preview-chat-d2608ef6-93f5-4d0d-bfb4-6435f0304186.space-z.ai/download/scoresbox-2026-11-18-feedback57.git-bundle
 - v1.0.56: https://preview-chat-d2608ef6-93f5-4d0d-bfb4-6435f0304186.space-z.ai/download/scoresbox-2026-11-13-feedback56.git-bundle
