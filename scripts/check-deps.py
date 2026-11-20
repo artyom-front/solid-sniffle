@@ -93,6 +93,8 @@ devdeps = set(pkg_json.get("devDependencies", {}))
 # пакеты, чьи типы/плагины резолвятся без прямого импорта из кода
 RESOLVED_IMPLICITLY = {
     "tailwindcss", "@tailwindcss/postcss", "tw-animate-css",  # CSS-пайплайн
+    "tailwindcss-animate",  # tailwind.config.ts (плагин анимаций; реальный
+    # импорт в конфиге — с 2026-11-18 объявлен явно, чтобы не болтался MISSING)
     "eslint", "eslint-config-next",                            # .eslintrc
     "typescript", "bun-types",                                 # tsc/tsconfig
     "prisma", "@prisma/client",                                # schema.prisma + генерация

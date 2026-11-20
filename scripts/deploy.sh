@@ -5,11 +5,11 @@
 #   bash scripts/deploy.sh 1.2.3
 # (вызов именно через bash: файл, залитый на сервер с Windows,
 #  может не иметь бита x — «./» даст Permission denied, exit 126)
-# Шаги: чистка старых образов (диск, v1.0.52) → диск-префлайт →
-# пул (docker compose pull, v1.0.52 — ретрай с пониманием «диск
-# переполнен») → бэкап БД (pg_dump + проверка pg_restore --list — всё
-# ВНУТРИ контейнера db, v1.0.45) → миграции (prisma migrate deploy) →
-# up → health-check → бутстрап админа → фиксация тега.
+# Шаги: чистка старых образов (диск, v1.0.52) → диск-пре-флайт →
+# пул (pull_resilient, v1.0.59 — локальный кэш → ретраи → зеркало,
+# без Docker Hub 429) → бэкап БД (pg_dump + проверка pg_restore --list —
+# всё ВНУТРИ контейнера db, v1.0.45) → миграции (prisma migrate deploy)
+# → up → health-check → бутстрап админа → фиксация тега.
 # Авто-откат при провале health-check — на РАБОЧУЮ версию из
 # .deploy/current (аудит №15: v1.0.44 — deploy.sh передаёт тег явно;
 # v1.0.45 — rollback.sh без аргумента тоже берёт current, а не
@@ -89,37 +89,61 @@ if [ -n "$AVAIL_KB" ] && [ "$AVAIL_KB" -lt $((3 * 1024 * 1024)) ]; then
   exit 1
 fi
 
-# ---------- 0.2. Предзагрузка образов (docker compose pull) ----------
-# v1.0.27 (инцидент 2026-09-24): раньше образ приложения тянулся
-# неявно внутри «compose run» (миграции) / «up» — и на медленном линке
-# VPS→ghcr.io слой ~239MB качался ~10 минут, съедая весь бюджет
-# деплой-джобы CD (джоба отменяла сама себя по timeout). Теперь пул —
-# отдельный шаг ДО миграций, с одним ретраем на transient-обрывы.
-# v1.0.52 (инцидент 2026-10-07): «no space left on device» — это НЕ
-# сеть: слепой ретрай бесполезен (уходит 20с + повторная загрузка ~2 мин).
-# Теперь выход пулла пишется в лог И стримится в CI (tee); при дисковом
-# отказе — чистка (dangling + system prune), диагностика (df, system df)
-# и повторный пул; при сетевом — прежний ретрай через 20с.
-echo "==> Предзагрузка образов (docker compose pull)"
-PULL_LOG="$(mktemp)"
-if ! TAG="$TAG" DEPLOY_IMAGE="$DEPLOY_IMAGE" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-     docker compose -f "$COMPOSE_FILE" pull 2>&1 | tee "$PULL_LOG"; then
-  if grep -qi 'no space left on device' "$PULL_LOG"; then
-    echo "!! Диск переполнен при извлечении слоёв — чистим и повторяем"
-    docker image prune -f 2>/dev/null | sed 's/^/     | /' || true
-    docker system prune -f >/dev/null 2>&1 || true
-    df -h "$DOCKER_ROOT" 2>/dev/null | tail -n 1 | sed 's/^/     | /' || true
-    docker system df 2>/dev/null | sed 's/^/     | /' || true
-    TAG="$TAG" DEPLOY_IMAGE="$DEPLOY_IMAGE" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-      docker compose -f "$COMPOSE_FILE" pull
-  else
-    echo "    пул не прошёл — повтор через 20с (линия VPS→ghcr.io нестабильна)"
-    sleep 20
-    TAG="$TAG" DEPLOY_IMAGE="$DEPLOY_IMAGE" POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
-      docker compose -f "$COMPOSE_FILE" pull
+# ---------- 0.2. Предзагрузка образов (pull_resilient, v1.0.59) ----------
+# v1.0.59 (инцидент v1.0.58, 2026-11-18): «docker compose pull» падал с
+# «429 Too Many Requests» от Docker Hub на образе postgres:16-alpine —
+# анонимный лимит pull с IP VPS исчерпан (деплои v1.0.56–58 долбили в
+# Docker Hub без пула ghcr). Compose-пулл АТОМНЫЙ: postgres не взял —
+# и образ приложения из ghcr.io не скачан, деплой умирал, а ретраи
+# только глубже расходовали лимит. Новый порядок:
+#   1) образ УЖЕ на сервере (docker image inspect) — пул не нужен вовсе;
+#   2) до 4 попыток с экспоненциальной паузой 20→40→80→160с;
+#      «no space left on device» — не сеть: чистка и повтор БЕЗ паузы;
+#   3) официальные образы Docker Hub (postgres) — фолбэк на зеркало
+#      Google mirror.gcr.io/library/<img> + docker tag: ghcr приложение
+#      не дублирует, а зеркало не под анонимным лимитом Docker Hub.
+# Образ приложения живёт в ghcr.io (свой регистр, лимита нет), postgres
+# уже стоит на сервере с v1.0.55 — после этого фикса деплой вообще
+# НЕ ходит в Docker Hub (локальный кэш → ghcr → зеркало Google).
+pull_resilient() {
+  local img="$1" delay=20 i log
+  if docker image inspect "$img" >/dev/null 2>&1; then
+    echo "    $img уже есть локально — пул не нужен"
+    return 0
   fi
-fi
-rm -f "$PULL_LOG"
+  for i in 1 2 3 4; do
+    log="$(mktemp)"
+    if docker pull "$img" 2>&1 | tee "$log"; then
+      rm -f "$log"; return 0
+    fi
+    if grep -qi 'no space left on device' "$log"; then
+      echo "    диск переполнен при извлечении — чистим и повторяем без паузы"
+      docker image prune -f >/dev/null 2>&1 || true
+      docker system prune -f >/dev/null 2>&1 || true
+      docker system df 2>/dev/null | sed 's/^/     | /' || true
+      df -h 2>/dev/null | sed 's/^/     | /' || true
+    else
+      echo "    пул $img не прошёл (попытка $i/4) — ждём ${delay}с"
+      sleep "$delay"; delay=$((delay * 2))
+    fi
+    rm -f "$log"
+  done
+  # фолбэк: официальные образы Docker Hub (postgres:16-alpine) — через
+  # зеркало Google; имя без «/» — признак официального (library/*)
+  case "$img" in
+    */*) ;;
+    *) if docker pull "mirror.gcr.io/library/$img"; then
+         docker tag "mirror.gcr.io/library/$img" "$img"
+         echo "    взят из зеркала mirror.gcr.io -> тег $img"
+         return 0
+       fi ;;
+  esac
+  echo "!! не удалось скачать $img — деплой ОСТАНОВЛЕН"
+  return 1
+}
+echo "==> Предзагрузка образов (pull_resilient)"
+pull_resilient "$DEPLOY_IMAGE:$TAG" || exit 1
+pull_resilient "postgres:16-alpine" || exit 1
 
 # ---------- 0.3. Первый запуск: подготовить БД-контейнер ----------
 if ! docker compose -f "$COMPOSE_FILE" ps db 2>/dev/null | grep -q "scoresbox-db"; then

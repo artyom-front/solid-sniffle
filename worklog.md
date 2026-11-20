@@ -3510,3 +3510,69 @@ Stage Summary:
   без миграций; после деплоя /api/health → "version":"1.0.57".
 - ДЕЛИВЕРИ: 231725a (fix ci) → 22fe018 (smoke) → release commit →
   make-archives (бандл 2026-11-18-feedback57 + README) → docs.
+
+## Task 62 · 2026-11-18 · feedback58 (v1.0.58) — фикс упавшего пуша v1.0.57
+
+**Инцидент:** пуш feedback57 упал в CI на шаге «Аудит deps» (check-deps.py,
+exit 1): `scripts/make-deploy-guide.mjs` импортировал `docx`, которого нет
+в package.json приложения (пакет ставился глобально в песочнице для
+генерации docx-гайда — в CI он не резолвится). Линт и tsc до этого прошли —
+фиксы feedback56 держатся; это был ЕДИНСТВЕННЫЙ блокер.
+
+**Развязка:**
+- `scripts/make-deploy-guide.mjs` + `patch-deploy-guide-footers.py` →
+  `tools/docs/` (НОВАЯ папка). check-deps сканит только src/tests/scripts/
+  prisma — генераторы документации с внешними зависимостями в дереве
+  приложения больше не живут. README-правило в tools/docs/README.md.
+- Хвосты несвязанного WIP (age-groups/custom-fields API, Portal-компоненты,
+  settings.ts, prisma/postgres) — ссылались на модели Prisma, которых НЕТ
+  в трекнутой схеме (AgeGroup/CustomField/Setting не существуют ни в одном
+  коммите) → засташены (`git stash push -u -m 'stranded worktree …'`),
+  в поставку не входят. Локальный tsc без них: 0 ошибок (совпадает с CI).
+- tailwind.config.ts реально импортирует `tailwindcss-animate`, а пакет
+  не был объявлен (локально маскировался глобальным node_modules) →
+  `bun add -d tailwindcss-animate@1.0.7` + allowlist-комментарий в
+  check-deps.py (RESOLVED_IMPLICITLY). bun.lock обновлён.
+
+**Верификация (= CI quality, локально):** tsc 0; eslint 0; bun test 157/157;
+bun audit 0 critical; check-deps: MISSING NONE (CI-симуляция по git ls-files);
+прод-сборка `bun run build` OK; сервер поднялся, /api/health → 1.0.58,
+smoke56 14/14 на сборке. МИГРАЦИЙ БД НЕТ — схема не менялась.
+
+Stage Summary:
+- v1.0.58: гейт deps снова зелёный. Доставлено: tools/docs/ (изоляция
+  генераторов), devDep tailwindcss-animate, чистое дерево.
+- Юзеру: применить бандл как обычно (fetch → reset → push), деплой без
+  миграций; после деплоя /api/health → "version":"1.0.58".
+
+## Task 62 — 2026-11-20 · v1.0.59 deploy59: деплой без Docker Hub (429)
+
+Stage: deploy fix (v1.0.59) · base: feedback58 (ebf1064)
+
+Инцидент v1.0.58 (2026-11-18): CI зелёный, образ в ghcr.io, но деплой
+упал на шаге 0.2 — «docker compose pull» получил 429 Too Many Requests
+от Docker Hub на postgres:16-alpine. Анонимный лимит pull с IP VPS
+исчерпан (деплои v1.0.56–58 долбили Docker Hub). Compose-пулл атомарный:
+postgres не скачался → не скачался и образ приложения из ghcr.io.
+
+Фикс scripts/deploy.sh, секция 0.2 → pull_resilient:
+1) docker image inspect: образ уже на сервере — пул не нужен вовсе
+   (postgres стоит с v1.0.55 → Docker Hub не трогаем совсем);
+2) до 4 попыток, пауза 20→40→80→160с; «no space left on device» —
+   чистка (prune/system prune) и повтор БЕЗ паузы (логика v1.0.52);
+3) фолбэк для официальных образов (postgres) — зеркало Google
+   mirror.gcr.io/library/<img> + docker tag;
+4) образ приложения — ghcr.io (свой регистр, без лимита).
+
+Результат: деплой вообще не зависит от Docker Hub.
+
+Верификация: bash -n OK; LF (без CRLF); меняется ТОЛЬКО scripts/deploy.sh
+(+ версия package.json 1.0.59) — код приложения не тронут, CI-гейты
+(tsc/eslint/unit/audit/check-deps) идут по unchanged-файлам feedback58.
+МИГРАЦИЙ НЕТ.
+
+Stage Summary:
+- v1.0.59: deploy.sh pull_resilient — локальный кэш → ghcr → зеркало
+  Google; Docker Hub 429 больше не ломает деплой.
+- Юзеру: применить бандл deploy59 как обычно (fetch → reset → push),
+  деплой без миграций; после деплоя /api/health → "version":"1.0.59".
